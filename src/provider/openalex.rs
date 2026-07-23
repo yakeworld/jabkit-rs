@@ -92,9 +92,8 @@ struct OASubfield {
 
 #[async_trait]
 impl Provider for OpenAlex {
-    fn name(&self) -> &'static str {
-        "OpenAlex"
-    }
+    fn name(&self) -> &'static str { "OpenAlex" }
+    fn key_env(&self) -> Option<&'static str> { Some("OPENALEX_API_KEY") }
 
     async fn search(&self, query: &str, limit: usize) -> Result<SearchResult> {
         let url = format!(

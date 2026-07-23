@@ -68,6 +68,7 @@ impl Provider for SemanticScholar {
     fn name(&self) -> &'static str {
         "SemanticScholar"
     }
+    fn key_env(&self) -> Option<&'static str> { Some("S2_API_KEY") }
 
     async fn search(&self, query: &str, limit: usize) -> Result<SearchResult> {
         let fields = [

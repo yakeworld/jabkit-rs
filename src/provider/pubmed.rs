@@ -75,6 +75,7 @@ impl Provider for PubMed {
     fn name(&self) -> &'static str {
         "Medline/PubMed"
     }
+    fn key_env(&self) -> Option<&'static str> { Some("PUBMED_API_KEY") }
 
     async fn search(&self, query: &str, limit: usize) -> Result<SearchResult> {
         // Step 1: esearch to get PMIDs

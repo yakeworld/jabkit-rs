@@ -1,28 +1,46 @@
 use anyhow::Result;
+use std::collections::HashMap;
 use std::process::Command;
 
-/// API keys for various providers
+/// API keys for all providers. Lookup by env var name.
 #[derive(Debug, Clone, Default)]
 pub struct ApiKeys {
-    pub semantic_scholar: Option<String>,
-    pub pubmed: Option<String>,
-    pub openalex: Option<String>,
+    semantic_scholar: Option<String>,
+    pubmed: Option<String>,
+    openalex: Option<String>,
+    extra: HashMap<String, String>,
 }
 
 impl ApiKeys {
+    /// All known env var names for API keys
+    const ALL_ENV_KEYS: &'static [&'static str] = &[
+        "S2_API_KEY", "PUBMED_API_KEY", "OPENALEX_API_KEY",
+        "IEEE_API_KEY", "SCOPUS_API_KEY", "SPRINGER_API_KEY",
+        "ACM_API_KEY", "ADS_API_KEY", "UNPAYWALL_EMAIL",
+        "BIODIVERSITY_KEY",
+    ];
+
     /// Load keys from environment variables
     pub fn from_env() -> Self {
+        let mut extra = HashMap::new();
+        for key in Self::ALL_ENV_KEYS {
+            if let Ok(v) = std::env::var(key) {
+                if !v.is_empty() {
+                    extra.insert(key.to_string(), v);
+                }
+            }
+        }
         Self {
-            semantic_scholar: std::env::var("S2_API_KEY").ok().filter(|s| !s.is_empty()),
-            pubmed: std::env::var("PUBMED_API_KEY").ok().filter(|s| !s.is_empty()),
-            openalex: std::env::var("OPENALEX_API_KEY").ok().filter(|s| !s.is_empty()),
+            semantic_scholar: extra.remove("S2_API_KEY"),
+            pubmed: extra.remove("PUBMED_API_KEY"),
+            openalex: extra.remove("OPENALEX_API_KEY"),
+            extra,
         }
     }
 
-    /// Load keys from system keyring via secret-tool CLI
+    /// Fallback: try GNOME Keyring for the 3 well-known JabRef keys
     pub fn with_keyring_fallback(self) -> Self {
         let mut keys = self;
-
         if keys.semantic_scholar.is_none() {
             keys.semantic_scholar = secret_tool_lookup("SemanticScholar");
         }
@@ -32,8 +50,25 @@ impl ApiKeys {
         if keys.openalex.is_none() {
             keys.openalex = secret_tool_lookup("OpenAlex");
         }
-
         keys
+    }
+
+    /// Get a key by its env var name
+    pub fn get(&self, env_name: &str) -> Option<&str> {
+        match env_name {
+            "S2_API_KEY" => self.semantic_scholar.as_deref(),
+            "PUBMED_API_KEY" => self.pubmed.as_deref(),
+            "OPENALEX_API_KEY" => self.openalex.as_deref(),
+            _ => self.extra.get(env_name).map(|s| s.as_str()),
+        }
+    }
+
+    /// Check if any key is set
+    pub fn has_any(&self) -> bool {
+        self.semantic_scholar.is_some()
+            || self.pubmed.is_some()
+            || self.openalex.is_some()
+            || !self.extra.is_empty()
     }
 }
 
@@ -44,34 +79,29 @@ fn secret_tool_lookup(account: &str) -> Option<String> {
         .args(["lookup", "service", "org.jabref.customapikeys", "account", account])
         .output()
         .ok()?;
-
     if !output.status.success() {
         return None;
     }
-
     let raw = String::from_utf8(output.stdout).ok()?;
     let raw = raw.trim().to_string();
     if raw.is_empty() {
         return None;
     }
-
     // Try JabRef AES decryption first
     if let Ok(plain) = decrypt_jabref(&raw) {
         if !plain.is_empty() {
             return Some(plain);
         }
     }
-
-    // Fallback: plaintext key
     Some(raw)
 }
 
 /// JabRef AES/CBC/PKCS5Padding decryption
-/// Key = SHA-256("{user}-{hostname}")[:16], IV = b"ThisIsA128BitKey"
 fn decrypt_jabref(ciphertext_b64: &str) -> Result<String> {
     use sha2::{Digest, Sha256};
-
-    let hostname = get_hostname();
+    let hostname = std::fs::read_to_string("/proc/sys/kernel/hostname")
+        .ok().map(|s| s.trim().to_string())
+        .unwrap_or_else(|| "localhost".to_string());
     let user = std::env::var("USER").unwrap_or_else(|_| "yakeworld".to_string());
     let key_str = format!("{}-{}", user, hostname);
 
@@ -79,31 +109,20 @@ fn decrypt_jabref(ciphertext_b64: &str) -> Result<String> {
     hasher.update(key_str.as_bytes());
     let hash = hasher.finalize();
     let key = &hash[..16];
-
-    let ciphertext = base64_decode(ciphertext_b64)?;
     let iv = b"ThisIsA128BitKey";
+
+    let ciphertext = {
+        use base64::Engine as _;
+        base64::engine::general_purpose::STANDARD
+            .decode(ciphertext_b64)
+            .map_err(|e| anyhow::anyhow!("Base64: {}", e))?
+    };
 
     use aes::cipher::{block_padding::Pkcs7, BlockDecryptMut, KeyIvInit};
     type Aes128CbcDec = cbc::Decryptor<aes::Aes128>;
-
     let mut buf = ciphertext.clone();
     let pt = Aes128CbcDec::new(key.into(), iv.into())
         .decrypt_padded_mut::<Pkcs7>(&mut buf)
-        .map_err(|e| anyhow::anyhow!("AES decryption failed: {:?}", e))?;
-
+        .map_err(|e| anyhow::anyhow!("AES: {:?}", e))?;
     Ok(String::from_utf8(pt.to_vec())?)
-}
-
-fn base64_decode(input: &str) -> Result<Vec<u8>> {
-    use base64::Engine as _;
-    base64::engine::general_purpose::STANDARD
-        .decode(input)
-        .map_err(|e| anyhow::anyhow!("Base64 decode failed: {}", e))
-}
-
-fn get_hostname() -> String {
-    std::fs::read_to_string("/proc/sys/kernel/hostname")
-        .ok()
-        .map(|s| s.trim().to_string())
-        .unwrap_or_else(|| "localhost".to_string())
 }

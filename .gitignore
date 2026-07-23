@@ -1,1 +1,21 @@
-/target
+# Rust
+target/
+Cargo.lock
+
+# Build artifacts
+dist/
+!dist/.gitkeep
+
+# Environment
+.env
+.jabkit.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
