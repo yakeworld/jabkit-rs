@@ -1,0 +1,46 @@
+[package]
+name = "jabkit"
+version = "0.1.0"
+edition = "2021"
+description = "Academic literature search CLI — Rust rewrite of jabkit"
+authors = ["Yakeworld"]
+
+[dependencies]
+# CLI
+clap = { version = "4", features = ["derive"] }
+
+# HTTP
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+tokio = { version = "1", features = ["full"] }
+
+# JSON
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# XML (arXiv)
+quick-xml = "0.36"
+
+# URL
+url = "2"
+
+# Error handling
+async-trait = "0.1"
+anyhow = "1"
+thiserror = "2"
+
+# Keyring via secret-tool CLI (no Rust crate needed)
+aes = "0.8"
+cbc = { version = "0.1", features = ["block-padding"] }
+sha2 = "0.10"
+base64 = "0.22"
+
+# Logging
+env_logger = "0.11"
+log = "0.4"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
+hex = "0.4"
