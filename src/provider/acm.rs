@@ -12,6 +12,7 @@ impl Acm {
 #[derive(Deserialize)]
 struct AcmResp { records: Option<Vec<AcmRecord>>, total: Option<usize>, }
 #[derive(Deserialize)]
+#[allow(non_snake_case)]
 struct AcmRecord {
     title: Option<String>, author: Option<Vec<AcmAuthor>>,
     publication: Option<String>, publicationDate: Option<String>,
@@ -58,7 +59,7 @@ impl Provider for Acm {
         let total_found = d.total.unwrap_or(entries.len());
         Ok(SearchResult { entries, total_found: total_found })
     }
-    async fn fetch_by_id(&self, id: &str) -> Result<BibEntry> {
+    async fn fetch_by_id(&self, _id: &str) -> Result<BibEntry> {
         anyhow::bail!("ACM ID lookup: use Crossref instead")
     }
 }

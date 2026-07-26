@@ -6,7 +6,6 @@ mod provider;
 use anyhow::Result;
 use clap::Parser;
 use cli::{Cli, Commands};
-use provider::Provider;
 use std::io::Write;
 
 fn load_dotenv() {

@@ -71,10 +71,10 @@ fn parse_arxiv_xml(xml: &str) -> Result<Vec<BibEntry>> {
     let mut in_given = false;
     let mut in_family = false;
     let mut in_published = false;
-    let mut in_updated = false;
+    let mut _in_updated = false;
     let mut in_doi = false;
-    let mut in_link = false;
-    let mut in_categories = false;
+    let _in_link = false;
+    let _in_categories = false;
     let mut in_journal_ref = false;
     let mut in_comment = false;
 
@@ -127,7 +127,7 @@ fn parse_arxiv_xml(xml: &str) -> Result<Vec<BibEntry>> {
                     "given_name" if in_author => in_given = true,
                     "family_name" if in_author => in_family = true,
                     "published" if in_entry => in_published = true,
-                    "updated" if in_entry => in_updated = true,
+                    "updated" if in_entry => _in_updated = true,
                     "arxiv:journal_ref" | "journal_ref" if in_entry => in_journal_ref = true,
                     "arxiv:comment" | "comment" if in_entry => in_comment = true,
                     _ => {}
@@ -165,7 +165,7 @@ fn parse_arxiv_xml(xml: &str) -> Result<Vec<BibEntry>> {
                     "given_name" => in_given = false,
                     "family_name" => in_family = false,
                     "published" => in_published = false,
-                    "updated" => in_updated = false,
+                    "updated" => _in_updated = false,
                     "arxiv:journal_ref" | "journal_ref" => in_journal_ref = false,
                     "arxiv:comment" | "comment" => in_comment = false,
                     _ => {}

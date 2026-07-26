@@ -10,7 +10,7 @@ authors = ["Yakeworld"]
 clap = { version = "4", features = ["derive"] }
 
 # HTTP
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "socks"] }
 tokio = { version = "1", features = ["full"] }
 
 # JSON
@@ -33,6 +33,7 @@ aes = "0.8"
 cbc = { version = "0.1", features = ["block-padding"] }
 sha2 = "0.10"
 base64 = "0.22"
+hex = "0.4"
 
 # Logging
 env_logger = "0.11"
@@ -45,4 +46,3 @@ opt-level = "z"
 lto = true
 codegen-units = 1
 strip = true
-hex = "0.4"

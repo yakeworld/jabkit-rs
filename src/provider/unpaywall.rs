@@ -12,6 +12,7 @@ impl Unpaywall {
 #[derive(Deserialize)]
 struct UpwResp { results: Vec<UpwResult>, total: Option<usize> }
 #[derive(Deserialize)]
+#[allow(dead_code)]
 struct UpwResult {
     doi: Option<String>, title: Option<String>,
     authors: Option<Vec<UpwAuthor>>, year: Option<i32>,

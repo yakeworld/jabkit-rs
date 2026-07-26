@@ -8,17 +8,20 @@ use crate::bibtex::{BibEntry, EntryType, Field};
 pub struct EuropePmc;
 
 #[derive(Debug, Deserialize)]
+#[allow(non_snake_case, dead_code)]
 struct EpmcResponse {
     resultList: EpmcResultList,
     hitCount: Option<usize>,
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(non_snake_case, dead_code)]
 struct EpmcResultList {
     result: Vec<EpmcResult>,
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(non_snake_case, dead_code)]
 struct EpmcResult {
     title: Option<String>,
     authorString: Option<String>,
@@ -41,6 +44,7 @@ struct EpmcAuthorList {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(non_snake_case, dead_code)]
 struct EpmcAuthor {
     fullName: Option<String>,
 }

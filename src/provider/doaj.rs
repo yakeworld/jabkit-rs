@@ -19,6 +19,7 @@ struct DoajResult {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct DoajBibjson {
     title: Option<String>,
     author: Option<Vec<DoajAuthor>>,
@@ -41,6 +42,7 @@ struct DoajAuthor {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct DoajJournal {
     name: Option<String>,
     issn: Option<String>,
@@ -50,6 +52,7 @@ struct DoajJournal {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct DoajLink {
     url: Option<String>,
 }

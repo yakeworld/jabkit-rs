@@ -24,6 +24,7 @@ struct InspireHit {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct InspireMetadata {
     titles: Option<Vec<InspireTitle>>,
     authors: Option<Vec<InspireAuthor>>,
@@ -42,12 +43,14 @@ struct InspireTitle {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct InspireAuthor {
     full_name: Option<String>,
     affiliations: Option<Vec<InspireAffiliation>>,
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct InspireAffiliation {
     value: Option<String>,
 }

@@ -37,6 +37,7 @@ pub enum Field {
     Publisher,
     Note,
     Url,
+    #[allow(dead_code)]
     Keywords,
 }
 
@@ -157,6 +158,7 @@ fn format_bibtex_value(value: &str, field: &Field) -> String {
 }
 
 /// Render multiple entries as a single BibTeX string
+#[allow(dead_code)]
 pub fn entries_to_bibtex(entries: &[BibEntry]) -> String {
     let mut result = String::new();
     for entry in entries {

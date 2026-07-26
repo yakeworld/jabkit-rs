@@ -69,7 +69,7 @@ impl Provider for Scopus {
         }).collect();
         Ok(SearchResult { entries, total_found: total })
     }
-    async fn fetch_by_id(&self, id: &str) -> Result<BibEntry> {
+    async fn fetch_by_id(&self, _id: &str) -> Result<BibEntry> {
         anyhow::bail!("Scopus ID lookup not yet implemented; use Crossref")
     }
 }

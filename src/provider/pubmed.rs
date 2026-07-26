@@ -22,6 +22,7 @@ struct ESearchResponse {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct ESearchResult {
     idlist: Vec<String>,
     #[serde(default)]
@@ -40,6 +41,7 @@ struct ESummaryResponse {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct ESummaryResult {
     uids: Vec<String>,
     #[serde(flatten)]
@@ -47,6 +49,7 @@ struct ESummaryResult {
 }
 
 #[derive(Debug, Deserialize, Default)]
+#[allow(dead_code)]
 struct ESummaryPaper {
     uid: Option<String>,
     title: Option<String>,
@@ -64,6 +67,7 @@ struct ESummaryPaper {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct ESummaryAuthor {
     name: Option<String>,
     authtype: Option<String>,

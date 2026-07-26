@@ -20,6 +20,7 @@ struct CrossrefMessage {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(non_snake_case, dead_code)]
 struct CrossrefItem {
     title: Option<Vec<String>>,
     author: Option<Vec<CrossrefAuthor>>,
@@ -46,6 +47,7 @@ struct CrossrefItem {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct CrossrefAuthor {
     given: Option<String>,
     family: Option<String>,
@@ -54,6 +56,7 @@ struct CrossrefAuthor {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct CrossrefAffiliation {
     name: Option<String>,
 }
@@ -61,7 +64,7 @@ struct CrossrefAffiliation {
 #[derive(Debug, Deserialize)]
 struct CrossrefDate {
     #[serde(rename = "date-parts")]
-    date_parts: Option<Vec<Vec<i32>>>,
+    date_parts: Option<Vec<Vec<Option<i32>>>>,
 }
 
 #[async_trait]
@@ -138,7 +141,7 @@ impl Provider for CrossRef {
                 if let Some(d) = item.issued.or(item.published_print).or(item.published_online) {
                     if let Some(parts) = d.date_parts {
                         if let Some(p) = parts.first() {
-                            if let Some(&year) = p.first() {
+                            if let Some(Some(year)) = p.first() {
                                 entry.set_field(Field::Year, year.to_string());
                             }
                         }
@@ -218,7 +221,7 @@ impl Provider for CrossRef {
         if let Some(d) = item.issued.or(item.published_print).or(item.published_online) {
             if let Some(parts) = d.date_parts {
                 if let Some(p) = parts.first() {
-                    if let Some(&year) = p.first() {
+                    if let Some(Some(year)) = p.first() {
                         entry.set_field(Field::Year, year.to_string());
                     }
                 }

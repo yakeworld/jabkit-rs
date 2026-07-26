@@ -31,6 +31,7 @@ struct DblpHit {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct DblpInfo {
     title: Option<String>,
     authors: Option<DblpAuthors>,

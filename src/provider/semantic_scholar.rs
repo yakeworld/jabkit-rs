@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use async_trait::async_trait;
 use serde::Deserialize;
 
@@ -16,6 +16,7 @@ impl SemanticScholar {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct S2Response {
     data: Vec<S2Paper>,
     #[serde(default)]
@@ -25,6 +26,7 @@ struct S2Response {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct S2Paper {
     paper_id: Option<String>,
     title: Option<String>,
@@ -54,6 +56,7 @@ struct S2Journal {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct S2ExternalIds {
     doi: Option<String>,
     arxiv: Option<String>,

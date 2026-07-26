@@ -14,6 +14,7 @@ struct SprResp { records: Vec<SprRecord>, result: Option<SprResult> }
 #[derive(Deserialize)]
 struct SprResult { total: Option<usize> }
 #[derive(Deserialize)]
+#[allow(non_snake_case, dead_code)]
 struct SprRecord {
     title: Option<String>, creators: Option<Vec<SprCreator>>,
     publicationName: Option<String>, publicationDate: Option<String>,
@@ -24,6 +25,7 @@ struct SprRecord {
 #[derive(Deserialize)]
 struct SprCreator { creator: Option<String> }
 #[derive(Deserialize)]
+#[allow(dead_code)]
 struct SprUrl { value: Option<String> }
 
 #[async_trait]

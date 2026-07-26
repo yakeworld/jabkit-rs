@@ -16,6 +16,7 @@ struct IeeeResp {
 }
 
 #[derive(Deserialize)]
+#[allow(dead_code)]
 struct IeeeArticle {
     title: Option<String>, authors: Option<IeeeAuthors>,
     publication_title: Option<String>, publication_year: Option<String>,

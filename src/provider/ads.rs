@@ -12,10 +12,12 @@ impl Ads {
 #[derive(Deserialize)]
 struct AdsResp { response: AdsResponse }
 #[derive(Deserialize)]
+#[allow(non_snake_case)]
 struct AdsResponse {
     docs: Vec<AdsDoc>, numFound: Option<usize>,
 }
 #[derive(Deserialize)]
+#[allow(dead_code)]
 struct AdsDoc {
     title: Option<Vec<String>>, author: Option<Vec<String>>,
     bibcode: Option<String>, doi: Option<Vec<String>>,
@@ -53,7 +55,7 @@ impl Provider for Ads {
         }).collect();
         Ok(SearchResult { entries, total_found: total })
     }
-    async fn fetch_by_id(&self, id: &str) -> Result<BibEntry> {
+    async fn fetch_by_id(&self, _id: &str) -> Result<BibEntry> {
         anyhow::bail!("ADS ID lookup not yet implemented")
     }
 }

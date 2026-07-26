@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use async_trait::async_trait;
 use serde::Deserialize;
 
@@ -22,6 +22,7 @@ struct OAResponse {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct OAMeta {
     count: usize,
     #[serde(default)]
@@ -31,6 +32,7 @@ struct OAMeta {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct OAWork {
     id: Option<String>,
     title: Option<String>,
@@ -47,12 +49,14 @@ struct OAWork {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct OAAuthorship {
     author: Option<OAAuthor>,
     author_position: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct OAAuthor {
     display_name: Option<String>,
     id: Option<String>,
@@ -64,6 +68,7 @@ struct OALocation {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct OASource {
     display_name: Option<String>,
     issn_l: Option<String>,
@@ -72,6 +77,7 @@ struct OASource {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct OAOpenAccess {
     is_oa: Option<bool>,
     oa_url: Option<String>,
@@ -79,6 +85,7 @@ struct OAOpenAccess {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct OATopic {
     display_name: Option<String>,
     id: Option<String>,
@@ -86,6 +93,7 @@ struct OATopic {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct OASubfield {
     display_name: Option<String>,
 }
