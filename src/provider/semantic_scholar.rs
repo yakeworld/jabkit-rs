@@ -27,6 +27,7 @@ struct S2Response {
 
 #[derive(Debug, Deserialize)]
 #[allow(dead_code)]
+#[serde(rename_all = "camelCase")]
 struct S2Paper {
     paper_id: Option<String>,
     title: Option<String>,
@@ -34,7 +35,8 @@ struct S2Paper {
     authors: Option<Vec<S2Author>>,
     journal: Option<S2Journal>,
     external_ids: Option<S2ExternalIds>,
-    abstract_text: Option<Vec<String>>,
+    #[serde(rename = "abstract")]
+    abstract_text: Option<String>,
     citation_count: Option<i32>,
     publication_types: Option<Vec<String>>,
     publication_date: Option<String>,
@@ -58,12 +60,16 @@ struct S2Journal {
 #[derive(Debug, Deserialize)]
 #[allow(dead_code)]
 struct S2ExternalIds {
+    #[serde(rename = "DOI")]
     doi: Option<String>,
+    #[serde(rename = "ArXiv")]
     arxiv: Option<String>,
-    pmid: Option<String>,
+    #[serde(rename = "PubMed")]
     pubmed: Option<String>,
-    mag: Option<String>,
-    corr_id: Option<String>,
+    #[serde(rename = "MAG")]
+    mag: Option<serde_json::Value>,
+    #[serde(rename = "CorpusId")]
+    corr_id: Option<serde_json::Value>,
 }
 
 #[async_trait]
@@ -115,12 +121,7 @@ impl Provider for SemanticScholar {
                 let pmid = p
                     .external_ids
                     .as_ref()
-                    .and_then(|id| id.pubmed.clone())
-                    .or_else(|| {
-                        p.external_ids
-                            .as_ref()
-                            .and_then(|id| id.pmid.clone())
-                    });
+                    .and_then(|id| id.pubmed.clone());
                 let arxiv = p
                     .external_ids
                     .as_ref()
@@ -158,7 +159,7 @@ impl Provider for SemanticScholar {
                     entry.set_field(Field::Eprint, arxiv);
                 }
                 if let Some(abs) = p.abstract_text {
-                    entry.set_field(Field::Abstract, abs.join(" "));
+                    entry.set_field(Field::Abstract, abs);
                 }
                 if let Some(date) = p.publication_date {
                     if date.len() >= 4 {
