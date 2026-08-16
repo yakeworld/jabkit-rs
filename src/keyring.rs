@@ -14,7 +14,7 @@ pub struct ApiKeys {
 impl ApiKeys {
     /// All known env var names for API keys
     const ALL_ENV_KEYS: &'static [&'static str] = &[
-        "S2_API_KEY", "SEMANTIC_SCHOLAR_API_KEY", "PUBMED_API_KEY", "OPENALEX_API_KEY",
+        "CORE_API_KEY", "S2_API_KEY", "SEMANTIC_SCHOLAR_API_KEY", "PUBMED_API_KEY", "OPENALEX_API_KEY",
         "IEEE_API_KEY", "SCOPUS_API_KEY", "SPRINGER_API_KEY",
         "ACM_API_KEY", "ADS_API_KEY", "UNPAYWALL_EMAIL",
         "BIODIVERSITY_KEY",

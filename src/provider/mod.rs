@@ -1,6 +1,7 @@
 pub mod acm;
 pub mod ads;
 pub mod arxiv;
+pub mod core;
 pub mod crossref;
 pub mod dblp;
 pub mod doaj;
@@ -55,6 +56,9 @@ pub fn all_providers(keys: &ApiKeys) -> Vec<Box<dyn Provider>> {
         Box::new(stubs::Lobid),
         Box::new(stubs::Doab),
         // Key required
+        Box::new(core::Core::new(
+            keys.get("CORE_API_KEY").map(String::from),
+        )),
         Box::new(semantic_scholar::SemanticScholar::new(
             keys.get("S2_API_KEY").map(String::from),
         )),

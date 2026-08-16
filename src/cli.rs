@@ -11,7 +11,8 @@ use clap::{Parser, Subcommand};
   Registered, no public API (9):
     CiteSeerX, ISIDORE, zbMATH, MathSciNet, ResearchGate, ScholarArchive
     GVK, LOBID, DOAB
-  Key required (10):
+  Key required (11):
+    CORE_API_KEY      CORE
     S2_API_KEY        SemanticScholar
     PUBMED_API_KEY    Medline/PubMed
     OPENALEX_API_KEY  OpenAlex
@@ -27,7 +28,9 @@ API Key priority: env var > .env file > GNOME Keyring (Linux)
   Run 'jabkit init' to create a .env template.
 
 Use 'list-providers' to check which keys are configured.
-Pipe --porcelain output to lit-import for dedup + PDF download."
+Pipe --porcelain output to lit-import for dedup + PDF download.
+
+Use --proxy to route through SOCKS5/HTTP proxy (e.g. --proxy socks5h://100.65.157.17:9050)"
 )]
 pub struct Cli {
     #[command(subcommand)]
@@ -40,13 +43,18 @@ pub struct Cli {
     /// Script-friendly output (BibTeX only). Pipe to lit-import.
     #[arg(short = 'p', long = "porcelain", global = true)]
     pub porcelain: bool,
+
+    /// Proxy URL (e.g. socks5h://100.65.157.17:9050, http://127.0.0.1:8118)
+    /// Sets https_proxy/http_proxy for all HTTP requests.
+    #[arg(long, global = true)]
+    pub proxy: Option<String>,
 }
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {
     /// Search academic databases (26 providers)
     Fetch {
-        #[arg(long, short)]
+        #[arg(long)]
         provider: String,
         #[arg(long, short)]
         query: String,
@@ -62,7 +70,7 @@ pub enum Commands {
     ListProviders,
     /// Fetch by ID (DOI, PMID, arXiv ID, etc.)
     GetById {
-        #[arg(long, short)]
+        #[arg(long)]
         provider: String,
         #[arg(long, short)]
         id: String,

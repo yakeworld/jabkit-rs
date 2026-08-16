@@ -26,6 +26,7 @@ fn generate_dotenv_template() -> String {
     s.push_str("# Uncomment and fill in your keys, or set as environment variables.\n");
     s.push_str("# Priority: env var > .env file > GNOME Keyring (Linux)\n\n");
     s.push_str("# General\n");
+    s.push_str("#CORE_API_KEY=\n");
     s.push_str("#S2_API_KEY=\n");
     s.push_str("#PUBMED_API_KEY=\n");
     s.push_str("#OPENALEX_API_KEY=\n\n");
@@ -46,6 +47,13 @@ async fn main() -> Result<()> {
     load_dotenv();
 
     let cli = Cli::parse();
+
+    // Apply proxy if specified — reqwest reads https_proxy/http_proxy env vars automatically
+    if let Some(proxy) = &cli.proxy {
+        std::env::set_var("https_proxy", proxy);
+        std::env::set_var("http_proxy", proxy);
+        std::env::set_var("all_proxy", proxy);
+    }
 
     if !cli.porcelain {
         env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
@@ -141,4 +149,120 @@ async fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use clap::Parser;
+    use crate::cli::{Cli, Commands};
+    use crate::bibtex::{BibEntry, EntryType, Field};
+
+    #[test]
+    fn test_fetch_command() {
+        let cli = Cli::try_parse_from(&["jabkit", "fetch", "--provider", "Crossref", "--query", "BPPV", "--limit", "5"]).unwrap();
+        match &cli.command {
+            Commands::Fetch { provider, query, limit } => {
+                assert_eq!(provider, "Crossref");
+                assert_eq!(query, "BPPV");
+                assert_eq!(*limit, 5);
+            }
+            _ => panic!("expected Fetch command"),
+        }
+    }
+
+    #[test]
+    fn test_fetch_default_limit() {
+        let cli = Cli::try_parse_from(&["jabkit", "fetch", "--provider", "arXiv", "--query", "test"]).unwrap();
+        match &cli.command {
+            Commands::Fetch { limit, .. } => assert_eq!(*limit, 20),
+            _ => panic!("expected Fetch command"),
+        }
+    }
+
+    #[test]
+    fn test_proxy_global_arg() {
+        let cli = Cli::try_parse_from(&["jabkit", "--proxy", "socks5h://tor:9050", "fetch", "--provider", "Crossref", "--query", "x"]).unwrap();
+        assert_eq!(cli.proxy.as_deref(), Some("socks5h://tor:9050"));
+    }
+
+    #[test]
+    fn test_porcelain_global_arg() {
+        let cli = Cli::try_parse_from(&["jabkit", "--porcelain", "fetch", "--provider", "Crossref", "--query", "x"]).unwrap();
+        assert!(cli.porcelain);
+    }
+
+    #[test]
+    fn test_list_providers_command() {
+        let cli = Cli::try_parse_from(&["jabkit", "list-providers"]).unwrap();
+        assert!(matches!(cli.command, Commands::ListProviders));
+    }
+
+    #[test]
+    fn test_init_command() {
+        let cli = Cli::try_parse_from(&["jabkit", "init"]).unwrap();
+        assert!(matches!(cli.command, Commands::Init));
+    }
+
+    #[test]
+    fn test_doi_to_bibtex_command() {
+        let cli = Cli::try_parse_from(&["jabkit", "doi-to-bibtex", "10.1234/test"]).unwrap();
+        match &cli.command {
+            Commands::DoiToBibtex { dois } => assert_eq!(dois[0], "10.1234/test"),
+            _ => panic!("expected DoiToBibtex"),
+        }
+    }
+
+    #[test]
+    fn test_get_by_id_command() {
+        let cli = Cli::try_parse_from(&["jabkit", "get-by-id", "--provider", "PubMed", "--id", "12345678"]).unwrap();
+        match &cli.command {
+            Commands::GetById { provider, id } => {
+                assert_eq!(provider, "PubMed");
+                assert_eq!(id, "12345678");
+            }
+            _ => panic!("expected GetById"),
+        }
+    }
+
+    #[test]
+    fn test_bibtex_entry_article() {
+        let mut e = BibEntry::new(EntryType::Article);
+        e.set_field(Field::Author, "Smith, John and Doe, Jane".into());
+        e.set_field(Field::Title, "A Test Paper".into());
+        e.set_field(Field::Journal, "Test Journal".into());
+        e.set_field(Field::Year, "2024".into());
+        e.set_field(Field::Doi, "10.1234/test.2024".into());
+        e.generate_key();
+        let bib = e.to_bibtex();
+        assert!(bib.starts_with("@article{smith2024,"));
+        assert!(bib.contains("{Smith, John and Doe, Jane"));
+        assert!(bib.contains("{A Test Paper"));
+        assert!(bib.contains("{10.1234/test.2024"));
+    }
+
+    #[test]
+    fn test_bibtex_key_generation() {
+        let mut e = BibEntry::new(EntryType::Article);
+        e.set_field(Field::Author, "Yang, Xiaokai".into());
+        e.set_field(Field::Year, "2026".into());
+        e.generate_key();
+        assert_eq!(e.citation_key, "yang2026");
+    }
+
+    #[test]
+    fn test_bibtex_key_no_author() {
+        let mut e = BibEntry::new(EntryType::Misc);
+        e.set_field(Field::Title, "No Author Paper".into());
+        e.generate_key();
+        assert_eq!(e.citation_key, "unknown");
+    }
+
+    #[test]
+    fn test_bibtex_field_set_empty() {
+        let mut e = BibEntry::new(EntryType::Article);
+        e.set_field(Field::Title, "Valid Title".into());
+        e.set_field(Field::Abstract, "".into());
+        assert!(e.get(Field::Abstract).is_none());
+        assert_eq!(e.get(Field::Title), Some("Valid Title"));
+    }
 }
