@@ -15,11 +15,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { target: x86_64-unknown-linux-gnu, runner: ubuntu-latest, ext: "" }
-          - { target: aarch64-unknown-linux-gnu, runner: ubuntu-latest, ext: "" }
-          - { target: x86_64-pc-windows-gnu, runner: ubuntu-latest, ext: ".exe" }
-          - { target: x86_64-apple-darwin, runner: macos-latest, ext: "" }
-          - { target: aarch64-apple-darwin, runner: macos-latest, ext: "" }
+          - { target: x86_64-unknown-linux-gnu, runner: ubuntu-latest, ext: "", artifact: "jabkit-linux-x86_64" }
+          - { target: x86_64-pc-windows-gnu, runner: ubuntu-latest, ext: ".exe", artifact: "jabkit-windows-x86_64" }
+          - { target: aarch64-apple-darwin, runner: macos-latest, ext: "", artifact: "jabkit-macos-aarch64" }
+          - { target: x86_64-apple-darwin, runner: macos-latest, ext: "", artifact: "jabkit-macos-x86_64" }
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
@@ -29,22 +28,9 @@ jobs:
       - run: cargo build --release --target ${{ matrix.target }}
       - name: Rename artifact
         run: |
-          os="${{ matrix.target }}"
-          case "$os" in
-            x86_64-unknown-linux-gnu)  name="jabkit-linux-x86_64" ;;
-            aarch64-unknown-linux-gnu) name="jabkit-linux-aarch64" ;;
-            x86_64-pc-windows-gnu)     name="jabkit-windows-x86_64" ;;
-            x86_64-apple-darwin)       name="jabkit-macos-x86_64" ;;
-            aarch64-apple-darwin)      name="jabkit-macos-aarch64" ;;
-          esac
-          mv "target/${{ matrix.target }}/release/jabkit${{ matrix.ext }}" "${name}${{ matrix.ext }}"
+          mv "target/${{ matrix.target }}/release/jabkit${{ matrix.ext }}" "${{ matrix.artifact }}${{ matrix.ext }}"
       - name: Upload
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            jabkit-linux-x86_64
-            jabkit-linux-aarch64
-            jabkit-windows-x86_64.exe
-            jabkit-macos-x86_64
-            jabkit-macos-aarch64
-          fail_on_unmatched_files: false
+          files: "${{ matrix.artifact }}${{ matrix.ext }}"
+          fail_on_unmatched_files: true
