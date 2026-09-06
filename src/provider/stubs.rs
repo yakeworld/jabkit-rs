@@ -53,7 +53,7 @@ impl Provider for Biodiversity {
             "https://www.biodiversitylibrary.org/api2/http://www.biodiversitylibrary.org/api2/GetSearchResults?q={}&limit={}&format=json&apikey={}",
             urlencoding(query), limit.min(50), key
         );
-        let resp = reqwest::Client::new().get(&url).header("User-Agent", "jabkit-rs/0.1").send().await?;
+        let resp = super::http_client().get(&url).header("User-Agent", "jabkit-rs/0.1").send().await?;
         if !resp.status().is_success() { anyhow::bail!("BiodiversityHL {}: {}", resp.status(), resp.text().await?); }
         let v: serde_json::Value = resp.json().await?;
         let entries: Vec<BibEntry> = v.pointer("/Result").and_then(|r| r.as_array()).map(|arr| {

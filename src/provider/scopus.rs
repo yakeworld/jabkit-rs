@@ -43,7 +43,7 @@ impl Provider for Scopus {
             "https://api.elsevier.com/content/search/scopus?query={}&count={}&apiKey={}",
             urlencoding(query), limit.min(25), key
         );
-        let resp = reqwest::Client::new().get(&url).header("User-Agent", "jabkit-rs/0.1")
+        let resp = super::http_client().get(&url).header("User-Agent", "jabkit-rs/0.1")
             .header("X-ELS-APIKey", key).send().await?;
         if !resp.status().is_success() { anyhow::bail!("Scopus {}: {}", resp.status(), resp.text().await?); }
         let d: ScoResp = resp.json().await?;

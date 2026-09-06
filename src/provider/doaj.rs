@@ -66,7 +66,7 @@ impl Provider for Doaj {
             "https://doaj.org/api/v2/search/articles/{}?pageSize={}",
             urlencoding(query), limit.min(100)
         );
-        let resp = reqwest::Client::new()
+        let resp = super::http_client()
             .get(&url).header("User-Agent", "jabkit-rs/0.1")
             .send().await?;
         if !resp.status().is_success() {

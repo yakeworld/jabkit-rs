@@ -15,13 +15,13 @@ impl Provider for ArXiv {
     }
 
     async fn search(&self, query: &str, limit: usize) -> Result<SearchResult> {
-        let q = query.replace(' ', "+");
+        let q = urlencoding(query);
         let url = format!(
             "https://export.arxiv.org/api/query?search_query=all:{}&max_results={}&sortBy=relevance&sortOrder=descending",
             q, limit.min(100)
         );
 
-        let resp = reqwest::Client::new()
+        let resp = super::http_client()
             .get(&url)
             .header("User-Agent", "jabkit/0.1")
             .send()
@@ -44,7 +44,7 @@ impl Provider for ArXiv {
         let arxiv_id = id.trim().strip_prefix("arXiv:").unwrap_or(id);
         let url = format!("https://export.arxiv.org/api/query?id_list={}", arxiv_id);
 
-        let resp = reqwest::Client::new()
+        let resp = super::http_client()
             .get(&url)
             .header("User-Agent", "jabkit/0.1")
             .send()
@@ -56,7 +56,16 @@ impl Provider for ArXiv {
     }
 }
 
+#[cfg(test)]
+pub fn parse_arxiv_xml_test(xml: &str) -> Result<Vec<BibEntry>> {
+    parse_arxiv_xml_impl(xml)
+}
+
 fn parse_arxiv_xml(xml: &str) -> Result<Vec<BibEntry>> {
+    parse_arxiv_xml_impl(xml)
+}
+
+fn parse_arxiv_xml_impl(xml: &str) -> Result<Vec<BibEntry>> {
     let mut reader = Reader::from_str(xml);
     reader.config_mut().trim_text(true);
 
@@ -142,7 +151,6 @@ fn parse_arxiv_xml(xml: &str) -> Result<Vec<BibEntry>> {
                         if !authors.is_empty() {
                             current.set_field(Field::Author, authors.join(" and "));
                         }
-                        current.set_field(Field::Eprint, "arXiv".to_string());
                         entries.push(current.clone());
                         in_entry = false;
                     }
@@ -185,11 +193,13 @@ fn parse_arxiv_xml(xml: &str) -> Result<Vec<BibEntry>> {
                 if in_id && in_entry {
                     // Format: http://arxiv.org/abs/XXXX.XXXXX
                     let id = text.trim();
-                    if let Some(pos) = id.find("/abs/") {
-                        current.set_field(Field::Eprint, id[pos + 5..].to_string());
+                    let clean = if let Some(pos) = id.find("/abs/") {
+                        id[pos + 5..].to_string()
                     } else {
-                        current.set_field(Field::Eprint, id.to_string());
-                    }
+                        id.to_string()
+                    };
+                    current.set_field(Field::Eprint, clean);
+                    current.set_field(Field::Note, "arXiv".to_string());
                 }
                 if in_title && in_entry {
                     let t = text.replace('\n', " ").trim().to_string();
@@ -226,7 +236,14 @@ fn parse_arxiv_xml(xml: &str) -> Result<Vec<BibEntry>> {
                     current.set_field(Field::Journal, text.trim().to_string());
                 }
                 if in_comment && in_entry {
-                    current.set_field(Field::Note, text.trim().to_string());
+                    let existing_note = current.get(Field::Note).unwrap_or_default().to_string();
+                    let c = text.trim().to_string();
+                    let note = if existing_note.is_empty() {
+                        c
+                    } else {
+                        format!("{}; {}", existing_note, c)
+                    };
+                    current.set_field(Field::Note, note);
                 }
             }
             Ok(Event::Eof) => break,
@@ -237,4 +254,20 @@ fn parse_arxiv_xml(xml: &str) -> Result<Vec<BibEntry>> {
     }
 
     Ok(entries)
+}
+
+fn urlencoding(s: &str) -> String {
+    let mut result = String::new();
+    for byte in s.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                result.push(byte as char);
+            }
+            b' ' => result.push('+'),
+            _ => {
+                result.push_str(&format!("%{:02X}", byte));
+            }
+        }
+    }
+    result
 }

@@ -78,22 +78,39 @@ async fn main() -> Result<()> {
             if !cli.porcelain {
                 log::info!("Found {} results", result.total_found);
             }
+            let mut seen: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
             for entry in &result.entries {
                 let mut e = entry.clone();
                 e.generate_key();
-                print!("{}", e.to_bibtex());
+                // Deduplicate citation keys: yang2026 → yang2026b, yang2026c, ...
+                let base = e.citation_key.clone();
+                let count = seen.entry(base.clone()).or_insert(0);
+                *count += 1;
+                if *count > 1 {
+                    let suffix = char::from_u32((b'a' as u32) + (*count - 2) as u32).unwrap_or('z');
+                    e.citation_key = format!("{}{}", base, suffix);
+                }
+                println!("{}", e.to_bibtex());
             }
         }
 
         Commands::DoiToBibtex { dois } => {
             let cr = providers.iter().find(|p| p.name() == "Crossref")
                 .ok_or_else(|| anyhow::anyhow!("Crossref provider not loaded"))?;
+            let mut failures = 0usize;
             for doi in dois {
                 if !cli.porcelain { log::info!("Fetching DOI: {}", doi); }
                 match cr.fetch_by_id(doi).await {
-                    Ok(mut entry) => { entry.generate_key(); print!("{}", entry.to_bibtex()); }
-                    Err(e) => { if cli.porcelain { eprintln!("ERROR: {}: {}", doi, e); } else { log::error!("{}: {}", doi, e); } }
+                    Ok(mut entry) => { entry.generate_key(); println!("{}", entry.to_bibtex()); }
+                    Err(e) => {
+                        failures += 1;
+                        if cli.porcelain { eprintln!("ERROR: {}: {}", doi, e); } else { log::error!("{}: {}", doi, e); }
+                    }
                 }
+            }
+            if failures > 0 {
+                eprintln!("doi-to-bibtex: {failures}/{} DOI(s) failed", dois.len());
+                anyhow::bail!("{failures} of {} DOI(s) failed", dois.len());
             }
         }
 
@@ -129,7 +146,7 @@ async fn main() -> Result<()> {
                 .find(|p| p.name().eq_ignore_ascii_case(provider))
                 .ok_or_else(|| anyhow::anyhow!("Unknown provider: {}", provider))?;
             match selected.fetch_by_id(id).await {
-                Ok(mut entry) => { entry.generate_key(); print!("{}", entry.to_bibtex()); }
+                Ok(mut entry) => { entry.generate_key(); println!("{}", entry.to_bibtex()); }
                 Err(e) => { anyhow::bail!("{}: {}", provider, e); }
             }
         }
@@ -264,5 +281,63 @@ mod tests {
         e.set_field(Field::Abstract, "".into());
         assert!(e.get(Field::Abstract).is_none());
         assert_eq!(e.get(Field::Title), Some("Valid Title"));
+    }
+
+    #[test]
+    fn test_arxiv_eprint_not_overwritten() {
+        use crate::provider::arxiv::parse_arxiv_xml_test;
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:arxiv="http://arxiv.org/schemas/atom">
+  <entry>
+    <id>http://arxiv.org/abs/2306.12345v2</id>
+    <title>Test Paper</title>
+    <summary>A summary.</summary>
+    <author><name><family_name>Smith</family_name><given_name>John</given_name></name></author>
+    <published>2023-06-21T00:00:00Z</published>
+    <link title="pdf" href="http://arxiv.org/pdf/2306.12345v2" rel="related" type="application/pdf"/>
+  </entry>
+</feed>"#;
+        let entries = parse_arxiv_xml_test(xml).unwrap();
+        assert_eq!(entries.len(), 1);
+        let eprint = entries[0].get(Field::Eprint).unwrap().to_string();
+        assert!(eprint.starts_with("2306.12345"), "eprint should be the real arXiv ID, got: {}", eprint);
+        assert_ne!(eprint, "arXiv", "eprint must not be the literal string 'arXiv'");
+    }
+
+    #[test]
+    fn test_citation_key_dedup() {
+        // Simulate the dedup logic from main.rs
+        let mut seen: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+        let base = "yang2026".to_string();
+
+        // First occurrence: no suffix
+        let count = seen.entry(base.clone()).or_insert(0);
+        *count += 1;
+        assert_eq!(*count, 1);
+        let key1 = if *count > 1 {
+            format!("{}{}", base, char::from_u32((b'a' as u32) + (*count - 2) as u32).unwrap_or('z'))
+        } else {
+            base.clone()
+        };
+        assert_eq!(key1, "yang2026");
+
+        // Second occurrence: suffix 'a'
+        let count = seen.entry(base.clone()).or_insert(0);
+        *count += 1;
+        assert_eq!(*count, 2);
+        let key2 = format!("{}{}", base, char::from_u32((b'a' as u32) + (*count - 2) as u32).unwrap_or('z'));
+        assert_eq!(key2, "yang2026a");
+
+        // Third occurrence: suffix 'b'
+        let count = seen.entry(base.clone()).or_insert(0);
+        *count += 1;
+        assert_eq!(*count, 3);
+        let key3 = format!("{}{}", base, char::from_u32((b'a' as u32) + (*count - 2) as u32).unwrap_or('z'));
+        assert_eq!(key3, "yang2026b");
+
+        // All keys unique
+        let keys = vec![key1, key2, key3];
+        let unique: std::collections::HashSet<_> = keys.iter().collect();
+        assert_eq!(unique.len(), 3, "all citation keys must be unique");
     }
 }

@@ -36,6 +36,17 @@ pub trait Provider: Send + Sync {
     async fn fetch_by_id(&self, id: &str) -> Result<BibEntry>;
 }
 
+/// Shared HTTP client with a 30s request timeout.
+/// All providers should use this instead of `reqwest::Client::new()`
+/// to avoid hanging forever on slow or unresponsive APIs.
+pub fn http_client() -> reqwest::Client {
+    reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new())
+}
+
 pub fn all_providers(keys: &ApiKeys) -> Vec<Box<dyn Provider>> {
     vec![
         // Free, no key needed

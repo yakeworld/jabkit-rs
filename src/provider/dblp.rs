@@ -96,7 +96,7 @@ impl Provider for Dblp {
             "https://dblp.org/search/publ/api?q={}&h={}&format=json",
             urlencoding(query), limit.min(100)
         );
-        let resp = reqwest::Client::new()
+        let resp = super::http_client()
             .get(&url).header("User-Agent", "jabkit-rs/0.1")
             .send().await?;
         if !resp.status().is_success() {
@@ -130,7 +130,7 @@ impl Provider for Dblp {
     async fn fetch_by_id(&self, id: &str) -> Result<BibEntry> {
         // DBLP key lookup: https://dblp.org/pid/... or DOI
         let url = format!("https://dblp.org/search/publ/api?q={}&h=1&format=json", urlencoding(id));
-        let resp = reqwest::Client::new()
+        let resp = super::http_client()
             .get(&url).header("User-Agent", "jabkit-rs/0.1")
             .send().await?;
         let d: DblpResponse = resp.json().await?;

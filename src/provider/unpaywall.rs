@@ -35,7 +35,7 @@ impl Provider for Unpaywall {
             "https://api.unpaywall.org/v2/search?query={}&page_size={}&email={}",
             urlencoding(query), limit.min(100), email
         );
-        let resp = reqwest::Client::new().get(&url).header("User-Agent", "jabkit-rs/0.1").send().await?;
+        let resp = super::http_client().get(&url).header("User-Agent", "jabkit-rs/0.1").send().await?;
         if !resp.status().is_success() { anyhow::bail!("Unpaywall {}: {}", resp.status(), resp.text().await?); }
         let d: UpwResp = resp.json().await?;
         let entries: Vec<BibEntry> = d.results.into_iter().map(|r| {
@@ -61,7 +61,7 @@ impl Provider for Unpaywall {
         let email = self.email.as_deref().ok_or_else(|| anyhow::anyhow!("Unpaywall requires email"))?;
         let doi = id.trim().strip_prefix("https://doi.org/").unwrap_or(id);
         let url = format!("https://api.unpaywall.org/v2/{}?email={}", doi, email);
-        let resp = reqwest::Client::new().get(&url).header("User-Agent", "jabkit-rs/0.1").send().await?;
+        let resp = super::http_client().get(&url).header("User-Agent", "jabkit-rs/0.1").send().await?;
         if !resp.status().is_success() { anyhow::bail!("Unpaywall {}: {}", resp.status(), resp.text().await?); }
         let d: serde_json::Value = resp.json().await?;
         let mut e = BibEntry::new(EntryType::Article);

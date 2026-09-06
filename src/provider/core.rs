@@ -82,7 +82,7 @@ impl Provider for Core {
             ]),
         };
 
-        let client = reqwest::Client::new();
+        let client = super::http_client();
         let mut req = client
             .post("https://api.core.ac.uk/v3/search/works")
             .header("Content-Type", "application/json")
@@ -140,7 +140,7 @@ impl Provider for Core {
     }
 
     async fn fetch_by_id(&self, id: &str) -> Result<BibEntry> {
-        let client = reqwest::Client::new();
+        let client = super::http_client();
         let mut req = client.get(format!("https://api.core.ac.uk/v3/outputs/{}", id));
         if let Some(key) = &self.api_key {
             req = req.header("Authorization", format!("Bearer {}", key));

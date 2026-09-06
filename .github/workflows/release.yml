@@ -3,25 +3,48 @@ on:
   push:
     tags: ["v*"]
 jobs:
-  build:
-    strategy:
-      matrix:
-        target:
-          - x86_64-unknown-linux-gnu
-          - x86_64-pc-windows-gnu
-          - x86_64-apple-darwin
-          - aarch64-apple-darwin
+  test:
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cargo test --release
+
+  build:
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: x86_64-unknown-linux-gnu, runner: ubuntu-latest, ext: "" }
+          - { target: aarch64-unknown-linux-gnu, runner: ubuntu-latest, ext: "" }
+          - { target: x86_64-pc-windows-gnu, runner: ubuntu-latest, ext: ".exe" }
+          - { target: x86_64-apple-darwin, runner: macos-latest, ext: "" }
+          - { target: aarch64-apple-darwin, runner: macos-latest, ext: "" }
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
       - run: rustup target add ${{ matrix.target }}
       - run: sudo apt-get update && sudo apt-get install -y mingw-w64
         if: contains(matrix.target, 'windows')
       - run: cargo build --release --target ${{ matrix.target }}
+      - name: Rename artifact
+        run: |
+          os="${{ matrix.target }}"
+          case "$os" in
+            x86_64-unknown-linux-gnu)  name="jabkit-linux-x86_64" ;;
+            aarch64-unknown-linux-gnu) name="jabkit-linux-aarch64" ;;
+            x86_64-pc-windows-gnu)     name="jabkit-windows-x86_64" ;;
+            x86_64-apple-darwin)       name="jabkit-macos-x86_64" ;;
+            aarch64-apple-darwin)      name="jabkit-macos-aarch64" ;;
+          esac
+          mv "target/${{ matrix.target }}/release/jabkit${{ matrix.ext }}" "${name}${{ matrix.ext }}"
       - name: Upload
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            target/${{ matrix.target }}/release/jabkit
-            target/${{ matrix.target }}/release/jabkit.exe
+            jabkit-linux-x86_64
+            jabkit-linux-aarch64
+            jabkit-windows-x86_64.exe
+            jabkit-macos-x86_64
+            jabkit-macos-aarch64
           fail_on_unmatched_files: false

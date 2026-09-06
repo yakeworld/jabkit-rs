@@ -110,7 +110,7 @@ impl Provider for OpenAlex {
             limit.min(200)
         );
 
-        let client = reqwest::Client::new();
+        let client = super::http_client();
         let mut req = client.get(&url).header("User-Agent", "jabkit/0.1");
         if let Some(key) = &self.api_key {
             req = req.header("x-api-key", key);
@@ -166,7 +166,7 @@ impl Provider for OpenAlex {
 
     async fn fetch_by_id(&self, id: &str) -> Result<BibEntry> {
         let url = format!("https://api.openalex.org/works/{}", urlencoding(id));
-        let client = reqwest::Client::new();
+        let client = super::http_client();
         let resp = client.get(&url).header("User-Agent", "jabkit/0.1").send().await?;
         if !resp.status().is_success() {
             anyhow::bail!("OpenAlex fetch_by_id {}: {}", resp.status(), resp.text().await?);

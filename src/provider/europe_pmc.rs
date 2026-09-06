@@ -58,7 +58,7 @@ impl Provider for EuropePmc {
             "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query={}&pageSize={}&format=json",
             urlencoding(query), limit.min(100)
         );
-        let resp = reqwest::Client::new()
+        let resp = super::http_client()
             .get(&url).header("User-Agent", "jabkit-rs/0.1")
             .send().await?;
         if !resp.status().is_success() {
@@ -98,7 +98,7 @@ impl Provider for EuropePmc {
             if id.starts_with("PMC") { "PMCID" } else { "EXT_ID" },
             urlencoding(id)
         );
-        let resp = reqwest::Client::new()
+        let resp = super::http_client()
             .get(&url).header("User-Agent", "jabkit-rs/0.1")
             .send().await?;
         let d: EpmcResponse = resp.json().await?;

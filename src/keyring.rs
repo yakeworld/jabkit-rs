@@ -3,12 +3,25 @@ use std::collections::HashMap;
 use std::process::Command;
 
 /// API keys for all providers. Lookup by env var name.
-#[derive(Debug, Clone, Default)]
+#[derive(Clone, Default)]
 pub struct ApiKeys {
     semantic_scholar: Option<String>,
     pubmed: Option<String>,
     openalex: Option<String>,
     extra: HashMap<String, String>,
+}
+
+impl std::fmt::Debug for ApiKeys {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut s = f.debug_struct("ApiKeys");
+        s.field("semantic_scholar", &self.semantic_scholar.as_ref().map(|_| "***"));
+        s.field("pubmed", &self.pubmed.as_ref().map(|_| "***"));
+        s.field("openalex", &self.openalex.as_ref().map(|_| "***"));
+        let extra: std::collections::BTreeMap<&String, &str> =
+            self.extra.iter().map(|(k, _)| (k, "***")).collect();
+        s.field("extra", &extra);
+        s.finish()
+    }
 }
 
 impl ApiKeys {

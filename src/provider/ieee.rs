@@ -40,7 +40,7 @@ impl Provider for Ieee {
             "https://ieeexploreapi.ieee.org/api/v1/search/articles?querytext={}&max_records={}&apikey={}",
             urlencoding(query), limit.min(100), key
         );
-        let resp = reqwest::Client::new().get(&url).header("User-Agent", "jabkit-rs/0.1").send().await?;
+        let resp = super::http_client().get(&url).header("User-Agent", "jabkit-rs/0.1").send().await?;
         if !resp.status().is_success() { anyhow::bail!("IEEE {}: {}", resp.status(), resp.text().await?); }
         let d: IeeeResp = resp.json().await?;
         let total = d.total_records.unwrap_or_default().parse().unwrap_or(d.articles.len());
@@ -67,7 +67,7 @@ impl Provider for Ieee {
         let key = self.api_key.as_deref().ok_or_else(|| anyhow::anyhow!("IEEE requires API key"))?;
         let doi = id.trim().strip_prefix("https://doi.org/").unwrap_or(id);
         let url = format!("https://ieeexploreapi.ieee.org/api/v1/search/articles?doi={}&apikey={}", doi, key);
-        let resp = reqwest::Client::new().get(&url).header("User-Agent", "jabkit-rs/0.1").send().await?;
+        let resp = super::http_client().get(&url).header("User-Agent", "jabkit-rs/0.1").send().await?;
         let d: IeeeResp = resp.json().await?;
         let a = d.articles.into_iter().next().ok_or_else(|| anyhow::anyhow!("No IEEE result for {}", id))?;
         let mut e = BibEntry::new(EntryType::Article);

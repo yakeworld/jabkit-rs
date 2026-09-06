@@ -80,7 +80,7 @@ impl Provider for CrossRef {
             limit.min(100)
         );
 
-        let resp = reqwest::Client::new()
+        let resp = super::http_client()
             .get(&url)
             .header("User-Agent", "jabkit/0.1 (mailto:yakeworld@gmail.com)")
             .send()
@@ -172,7 +172,7 @@ impl Provider for CrossRef {
         let doi = id.trim().strip_prefix("https://doi.org/").unwrap_or(id);
         let url = format!("https://api.crossref.org/works/{}", urlencoding(doi));
 
-        let resp = reqwest::Client::new()
+        let resp = super::http_client()
             .get(&url)
             .header("User-Agent", "jabkit/0.1 (mailto:yakeworld@gmail.com)")
             .send()
@@ -195,6 +195,13 @@ impl Provider for CrossRef {
 
         if let Some(titles) = item.title {
             entry.set_field(Field::Title, titles.join(". "));
+        }
+        // Subtitle appended to title if present
+        if let Some(subs) = item.subtitle {
+            let existing = entry.get(Field::Title).unwrap_or_default();
+            if !subs.is_empty() {
+                entry.set_field(Field::Title, format!("{}: {}", existing, subs.join(". ")));
+            }
         }
         if let Some(authors) = item.author {
             let names: Vec<String> = authors
@@ -230,6 +237,14 @@ impl Provider for CrossRef {
 
         if let Some(doi) = item.DOI {
             entry.set_field(Field::Doi, doi);
+        }
+        if let Some(pmid) = item.PMID {
+            entry.set_field(Field::Pmid, pmid);
+        }
+        if let Some(abs_bits) = item.abstract_text {
+            // CrossRef returns abstract as HTML bits
+            let clean = abs_bits.replace("<jats:p>", "").replace("</jats:p>", "");
+            entry.set_field(Field::Abstract, clean);
         }
 
         Ok(entry)

@@ -38,7 +38,7 @@ impl Provider for Springer {
             "https://api.springernature.com/meta/v2/json?q={}&api_key={}&s={}",
             urlencoding(query), key, limit.min(50)
         );
-        let resp = reqwest::Client::new().get(&url).header("User-Agent", "jabkit-rs/0.1").send().await?;
+        let resp = super::http_client().get(&url).header("User-Agent", "jabkit-rs/0.1").send().await?;
         if !resp.status().is_success() { anyhow::bail!("Springer {}: {}", resp.status(), resp.text().await?); }
         let d: SprResp = resp.json().await?;
         let total = d.result.and_then(|r| r.total).unwrap_or(d.records.len());
@@ -67,7 +67,7 @@ impl Provider for Springer {
         let key = self.api_key.as_deref().ok_or_else(|| anyhow::anyhow!("Springer requires API key"))?;
         let doi = id.trim().strip_prefix("https://doi.org/").unwrap_or(id);
         let url = format!("https://api.springernature.com/meta/v2/json?q=doi:{}&api_key={}", doi, key);
-        let resp = reqwest::Client::new().get(&url).header("User-Agent", "jabkit-rs/0.1").send().await?;
+        let resp = super::http_client().get(&url).header("User-Agent", "jabkit-rs/0.1").send().await?;
         let d: SprResp = resp.json().await?;
         let r = d.records.into_iter().next().ok_or_else(|| anyhow::anyhow!("No Springer result"))?;
         let mut e = BibEntry::new(EntryType::Article);

@@ -5,7 +5,7 @@ use clap::{Parser, Subcommand};
     name = "jabkit",
     version,
     about = "Academic literature search CLI",
-    after_help = "Providers (25):
+    after_help = "Providers (26):
   No key needed (6):
     Crossref, arXiv, DBLP, DOAJ, EuropePMC, INSPIRE
   Registered, no public API (9):

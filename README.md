@@ -2,16 +2,17 @@
 
 **Academic literature search CLI** — Rust rewrite of jabkit.
 
-Single binary, sub-millisecond startup (vs ~15s Java original). Supports 5 academic providers with BibTeX output.
+Single binary, fast startup (vs ~15s Java original). Supports 26 academic providers with BibTeX output.
 
 ## Features
 
-- 🚀 **Sub-ms startup** — Rust native binary, no JVM, no Gradle
+- 🚀 **Fast startup** — Rust native binary, no JVM, no Gradle
 - 📦 **Single binary** ~3.5MB (vs 176MB JRE bundle)
-- 🔍 **5 providers**: Semantic Scholar, PubMed/MEDLINE, Crossref, arXiv, OpenAlex
+- 🔍 **26 providers**: Crossref, arXiv, DBLP, DOAJ, EuropePMC, INSPIRE, SemanticScholar, Medline/PubMed, OpenAlex, Scopus, CORE, IEEE, Springer, ACM, ADS, Unpaywall, BiodiversityHL + 9 registered stubs
 - 📝 **BibTeX output** — pipe directly to `lit-import`
 - 🔑 **API key chain**: env var → `.env` file → GNOME Keyring
 - 🔄 **DOI→BibTeX** converter
+- 🌐 **Proxy support**: `--proxy socks5h://host:port` for all HTTP requests
 
 ## Installation
 
@@ -22,6 +23,12 @@ Single binary, sub-millisecond startup (vs ~15s Java original). Supports 5 acade
 curl -sL https://github.com/yakeworld/jabkit-rs/releases/latest/download/jabkit-linux-x86_64 -o jabkit-rs
 chmod +x jabkit-rs
 sudo mv jabkit-rs /usr/local/bin/
+
+# Or build from source
+git clone https://github.com/yakeworld/jabkit-rs.git
+cd jabkit-rs
+cargo build --release
+# Binary at: target/release/jabkit
 ```
 
 ### Windows
@@ -31,8 +38,11 @@ Download `jabkit.exe` from [Releases](https://github.com/yakeworld/jabkit-rs/rel
 ## Quick Start
 
 ```bash
-# Search academic literature
-jabkit-rs fetch -q "3D eye movement nystagmus" -n 20
+# Search academic literature (provider is required)
+jabkit-rs fetch --provider Crossref -q "3D eye movement nystagmus" --limit 20
+
+# Search arXiv
+jabkit-rs fetch --provider arXiv -q "nystagmus" --limit 10
 
 # Convert DOI to BibTeX
 jabkit-rs doi-to-bibtex 10.1016/j.cmpb.2023.107526
@@ -41,9 +51,9 @@ jabkit-rs doi-to-bibtex 10.1016/j.cmpb.2023.107526
 jabkit-rs list-providers
 
 # Fetch by ID
-jabkit-rs get-by-id --doi 10.1007/s00417-023-06145-3
-jabkit-rs get-by-id --pmid 37488184
-jabkit-rs get-by-id --arxiv 2306.12345
+jabkit-rs get-by-id --provider Crossref --id 10.1007/s00417-023-06145-3
+jabkit-rs get-by-id --provider "Medline/PubMed" --id 37488184
+jabkit-rs get-by-id --provider arXiv --id 2306.12345
 ```
 
 ## Usage
@@ -54,28 +64,29 @@ jabkit-rs get-by-id --arxiv 2306.12345
 jabkit-rs fetch [OPTIONS] -q <QUERY>
 
 Options:
-  -q, --query <QUERY>    Search query [required]
-  -n, --num <NUM>        Results per provider [default: 10]
-  -p, --provider <PROV>  Provider(s): s2, pubmed, crossref, arxiv, openalex, all [default: all]
-  -y, --year <YEAR>      Filter by year (e.g. "2024-" or "2023-2025")
-  -o, --output <FILE>    Output file (default: stdout / BibTeX)
-  --journal <JOURNAL>    Filter by journal name
+  -q, --query <QUERY>       Search query [required]
+  --provider <PROVIDER>     Provider name [required, see list-providers]
+  --limit <LIMIT>           Max results [default: 20]
+  -p, --porcelain           BibTeX only, no log lines (global flag)
+  --proxy <URL>             Proxy URL (global flag)
 ```
 
-### `doi-to-bibtex` — DOI to BibTeX
+### `doi-to-bibtex` — DOI to BibTeX (via Crossref)
 
 ```bash
 jabkit-rs doi-to-bibtex <DOI> [DOI...]
 jabkit-rs doi-to-bibtex 10.1007/s00417-023-06145-3 10.1038/s41598-023-37339-8
 ```
 
+Returns non-zero exit code if any DOI fails. Use `--porcelain` for BibTeX-only stdout.
+
 ### `get-by-id` — Fetch by identifier
 
 ```bash
-jabkit-rs get-by-id --doi <DOI>
-jabkit-rs get-by-id --pmid <PMID>
-jabkit-rs get-by-id --arxiv <ARXIV_ID>
-jabkit-rs get-by-id --s2id <S2_PAPER_ID>
+jabkit-rs get-by-id --provider <PROVIDER> --id <ID>
+jabkit-rs get-by-id --provider Crossref --id 10.1007/s00417-023-06145-3
+jabkit-rs get-by-id --provider "Medline/PubMed" --id 37488184
+jabkit-rs get-by-id --provider arXiv --id 2306.12345
 ```
 
 ### `list-providers` — Show provider status
@@ -86,12 +97,27 @@ jabkit-rs list-providers
 
 Output:
 ```
-Crossref         FREE  ✓ no key needed
-SemanticScholar  KEY   ✓ configured (S2_API_KEY)
-Medline/PubMed   KEY   ✓ configured (PUBMED_API_KEY)
-arXiv            FREE  ✓ no key needed
-OpenAlex         KEY   ✓ configured (OPENALEX_API_KEY)
+Available providers:
+  Crossref         FREE  ✓ no key needed
+  arXiv            FREE  ✓ no key needed
+  DBLP             FREE  ✓ no key needed
+  DOAJ             FREE  ✓ no key needed
+  EuropePMC        FREE  ✓ no key needed
+  INSPIRE          FREE  ✓ no key needed
+  SemanticScholar  KEY   ✓ configured (S2_API_KEY)
+  Medline/PubMed   KEY   ✓ configured (PUBMED_API_KEY)
+  OpenAlex         KEY   ✓ configured (OPENALEX_API_KEY)
+  Scopus           KEY   ✓ configured (SCOPUS_API_KEY)
+  ...
 ```
+
+### `init` — Create .env template
+
+```bash
+jabkit-rs init
+```
+
+Creates `.env` in current directory with all known key names as comments.
 
 ## API Keys
 
@@ -102,11 +128,24 @@ OpenAlex         KEY   ✓ configured (OPENALEX_API_KEY)
 | OpenAlex | `OPENALEX_API_KEY` | https://openalex.org/account |
 | Crossref | Free, no key needed | — |
 | arXiv | Free, no key needed | — |
+| DBLP | Free, no key needed | — |
+| DOAJ | Free, no key needed | — |
+| EuropePMC | Free, no key needed | — |
+| INSPIRE | Free, no key needed | — |
+| CORE | `CORE_API_KEY` | https://core.ac.uk/services/api |
+| IEEE | `IEEE_API_KEY` | https://ieeexplore.ieee.org |
+| Springer | `SPRINGER_API_KEY` | https://api.springer.com |
+| Scopus | `SCOPUS_API_KEY` | https://www.elsevier.com |
+| ACM | `ACM_API_KEY` | https://dl.acm.org |
+| ADS (NASA) | `ADS_API_KEY` | https://ui.adsabs.harvard.edu |
+| Unpaywall | `UNPAYWALL_EMAIL` | Your email (free) |
+| BiodiversityHL | `BIODIVERSITY_KEY` | https://biodiversitylibrary.org |
 
 Key resolution priority:
 1. Environment variable
 2. `.env` file in current directory
-3. GNOME Keyring (service: `org.jabref.customapikeys`)
+3. `~/.jabkit.env` (home fallback)
+4. GNOME Keyring (service: `org.jabref.customapikeys`)
 
 ### Setting keys
 
@@ -117,6 +156,9 @@ export S2_API_KEY="your-key-here"
 # Environment variable (Windows PowerShell)
 $env:S2_API_KEY = "your-key-here"
 
+# .env file
+echo 'S2_API_KEY=your-key-here' > .env
+
 # GNOME Keyring (Linux only)
 secret-tool store --label="S2_API_KEY" service org.jabref.customapikeys account S2_API_KEY
 ```
@@ -124,43 +166,61 @@ secret-tool store --label="S2_API_KEY" service org.jabref.customapikeys account 
 ## Porcelain Mode (script-friendly)
 
 ```bash
-jabkit-rs fetch -p s2 -q "3D eye" -n 5 --porcelain
+jabkit-rs fetch --provider Crossref -q "3D eye" --limit 5 --porcelain
 # Output: BibTeX only, no log lines. Pipe to lit-import:
-jabkit-rs fetch -q "vestibular" --porcelain | lit-import --bib -
+jabkit-rs fetch --provider Crossref -q "vestibular" --porcelain | lit-import --bib -
 ```
 
-## Build from Source
+## Proxy Support
 
 ```bash
-git clone https://github.com/yakeworld/jabkit-rs.git
-cd jabkit-rs
-cargo build --release
-# Binary at: target/release/jabkit
+jabkit-rs --proxy socks5h://100.65.157.17:9050 fetch --provider Crossref -q "test"
 ```
 
-### Cross-compile for Windows
-
-```bash
-rustup target add x86_64-pc-windows-gnu
-cargo build --release --target x86_64-pc-windows-gnu
-# Binary at: target/x86_64-pc-windows-gnu/release/jabkit.exe
-```
+Routes all HTTP requests through the specified SOCKS5/HTTP proxy.
 
 ## Architecture
 
 ```
 src/
-├── main.rs          # Entry point + CLI parsing
-├── cli.rs           # Subcommand routing
+├── main.rs          # Entry point + CLI routing
+├── cli.rs           # Subcommand definitions
 ├── bibtex.rs        # BibTeX generation
-├── keyring.rs       # API key resolution
+├── keyring.rs       # API key resolution (env → .env → keyring)
 └── provider/
-    ├── mod.rs
+    ├── mod.rs       # Provider trait + shared HTTP client (30s timeout)
+    ├── crossref.rs  # Crossref REST API
+    ├── arxiv.rs     # arXiv Atom XML API
+    ├── dblp.rs      # DBLP API
+    ├── doaj.rs      # DOAJ API
+    ├── europe_pmc.rs# Europe PMC API
+    ├── inspire.rs   # INSPIRE API
     ├── semantic_scholar.rs  # Semantic Scholar API v2
-    ├── pubmed.rs            # NCBI E-Utilities
-    ├── crossref.rs          # Crossref REST API
-    ├── arxiv.rs             # arXiv OAI-PMH
-    └── openalex.rs          # OpenAlex REST API
+    ├── pubmed.rs    # NCBI E-Utilities
+    ├── openalex.rs  # OpenAlex REST API
+    ├── scopus.rs    # Scopus API
+    ├── core.rs      # CORE API
+    ├── ieee.rs      # IEEE Xplore
+    ├── springer.rs  # Springer Link
+    ├── acm.rs       # ACM Digital Library
+    ├── ads.rs       # ADS (NASA)
+    ├── unpaywall.rs # Unpaywall
+    └── stubs.rs     # Registered but no public API (9 providers)
+```
+
+## Building
+
+```bash
+cargo build --release
+# Binary at: target/release/jabkit
+
+# Run tests
+cargo test --release
+
+# Cross-compile for Windows
+rustup target add x86_64-pc-windows-gnu
+cargo build --release --target x86_64-pc-windows-gnu
+# Binary at: target/x86_64-pc-windows-gnu/release/jabkit.exe
 ```
 
 ## License

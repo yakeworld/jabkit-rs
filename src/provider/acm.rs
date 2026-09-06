@@ -32,7 +32,7 @@ impl Provider for Acm {
             "https://api.acm.org/api/v1/search?query={}&pageSize={}",
             urlencoding(query), limit.min(50)
         );
-        let resp = reqwest::Client::new().get(&url)
+        let resp = super::http_client().get(&url)
             .header("User-Agent", "jabkit-rs/0.1")
             .header("ApiKey", key)
             .send().await?;

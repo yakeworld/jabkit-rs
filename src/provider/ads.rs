@@ -33,7 +33,7 @@ impl Provider for Ads {
     async fn search(&self, query: &str, limit: usize) -> Result<SearchResult> {
         let key = self.api_key.as_deref().ok_or_else(|| anyhow::anyhow!("ADS requires ADS_API_KEY"))?;
         let url = format!("https://api.adsabs.harvard.edu/v1/search/query?q={}&rows={}", urlencoding(query), limit.min(100));
-        let resp = reqwest::Client::new().get(&url)
+        let resp = super::http_client().get(&url)
             .header("User-Agent", "jabkit-rs/0.1")
             .header("Authorization", format!("Bearer {}", key))
             .send().await?;

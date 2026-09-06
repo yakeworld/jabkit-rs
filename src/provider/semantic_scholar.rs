@@ -94,7 +94,7 @@ impl Provider for SemanticScholar {
             fields
         );
 
-        let client = reqwest::Client::new();
+        let client = super::http_client();
         let mut req = client.get(&url).header("User-Agent", "jabkit/0.1");
         if let Some(key) = &self.api_key {
             req = req.header("x-api-key", key);
@@ -183,7 +183,7 @@ impl Provider for SemanticScholar {
             "https://api.semanticscholar.org/graph/v1/paper/{}?fields=title,year,authors,journal,externalIds,abstract,venue",
             id
         );
-        let client = reqwest::Client::new();
+        let client = super::http_client();
         let mut req = client.get(&url).header("User-Agent", "jabkit/0.1");
         if let Some(key) = &self.api_key {
             req = req.header("x-api-key", key);

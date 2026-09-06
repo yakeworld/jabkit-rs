@@ -92,7 +92,7 @@ impl Provider for PubMed {
             search_url.push_str(&format!("&api_key={}", key));
         }
 
-        let client = reqwest::Client::new();
+        let client = super::http_client();
         let resp = client
             .get(&search_url)
             .header("User-Agent", "jabkit/0.1")
@@ -194,7 +194,7 @@ impl Provider for PubMed {
             url.push_str(&format!("&api_key={}", key));
         }
 
-        let resp = reqwest::Client::new()
+        let resp = super::http_client()
             .get(&url)
             .header("User-Agent", "jabkit/0.1")
             .send()

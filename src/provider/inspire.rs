@@ -88,7 +88,7 @@ impl Provider for Inspire {
             "https://inspirehep.net/api/literature?q={}&size={}",
             urlencoding(query), limit.min(100)
         );
-        let resp = reqwest::Client::new()
+        let resp = super::http_client()
             .get(&url).header("User-Agent", "jabkit-rs/0.1")
             .send().await?;
         if !resp.status().is_success() {
@@ -142,7 +142,7 @@ impl Provider for Inspire {
 
     async fn fetch_by_id(&self, id: &str) -> Result<BibEntry> {
         let url = format!("https://inspirehep.net/api/literature?q={}&size=1", urlencoding(id));
-        let resp = reqwest::Client::new()
+        let resp = super::http_client()
             .get(&url).header("User-Agent", "jabkit-rs/0.1")
             .send().await?;
         let d: InspireResponse = resp.json().await?;
