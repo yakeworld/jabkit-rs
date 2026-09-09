@@ -34,6 +34,11 @@ pub trait Provider: Send + Sync {
     fn key_env(&self) -> Option<&'static str> {
         None
     }
+    /// True if this provider is a registered placeholder with no working API.
+    /// Used by `list-providers` to label it so users don't assume it works.
+    fn is_stub(&self) -> bool {
+        false
+    }
     async fn search(&self, query: &str, limit: usize) -> Result<SearchResult>;
     async fn fetch_by_id(&self, id: &str) -> Result<BibEntry>;
 }

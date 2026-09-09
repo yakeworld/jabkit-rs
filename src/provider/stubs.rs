@@ -31,6 +31,9 @@ macro_rules! stub_provider {
             fn key_env(&self) -> Option<&'static str> {
                 $key_env
             }
+            fn is_stub(&self) -> bool {
+                true
+            }
             async fn search(&self, _query: &str, _limit: usize) -> Result<SearchResult> {
                 anyhow::bail!("{}: no public search API available", $display)
             }

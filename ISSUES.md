@@ -127,13 +127,28 @@
 - **修复**: 提取 `deduplicate_keys(&mut [BibEntry])` 到 `bibtex.rs`；fetch 和 doi-to-bibtex 共用；测试改为直接调用生产函数
 - **回归测试**: `test_citation_key_dedup`（4 条含 3 条重复 → 4 个唯一键，直接调 `deduplicate_keys`）
 
-## 待修
+## 已修（2026-09-09 — 第二轮：括号安全 + 透明 + 在线冒烟）
 
-### P2: 字段格式化无括号平衡校验
-- **位置**: `src/bibtex.rs` `format_bibtex_value()`
-- **现象**: 上游数据含不平衡 `{}` 时，生成的 BibTeX 可能无法被解析器正确解析
-- **修复方向**: 输出前校验括号平衡，不平衡时转义或丢弃
-- **优先级**: 低（上游数据质量差时才会触发）
+### BibTeX 字段括号平衡校验
+- **位置**: `src/bibtex.rs` `escape_unbalanced_braces()` + `format_bibtex_value()`
+- **现象**: 上游 title 含未配对 `{}`（数学公式、化学式高频）时，原"只加外层括号"会让解析器吞掉后续字段或报解析错
+- **修复**: 渲染前双向扫描定位未配对括号，未配对的转义为 `\{`/`\}`；已配对分组（如保护大写的 `{N}ystagmus`）原样保留
+- **回归测试**: `test_brace_balanced_preserved`、`test_brace_stray_open_escaped`、`test_brace_stray_close_escaped`、`test_brace_nested_balanced_untouched`、`test_brace_output_roundtrip_parens_balanced`（断言未转义括号数配平）
+- **效果**: 字段体永远 well-formed，导入 JabRef/LaTeX 不再因 stray brace 崩
+
+### list-providers 区分占位 / 已实现
+- **位置**: `src/provider/mod.rs`（trait 加 `is_stub()`）、`stubs.rs`（宏展开 `is_stub()=true`）、`main.rs` ListProviders
+- **现象**: 9 个占位 provider 与真 provider 平铺展示，用户把"已注册"误当"能搜"
+- **修复**: 占位项显示 `[stub — no API]`，真 provider 显示 `[key]`/`[no key]`
+- **实测**: `list-providers` 9 个 stub 全部标注，16 个真 provider 显示密钥状态 ✓
+
+### 在线冒烟 e2e 测试（真实 Crossref）
+- **位置**: `src/main.rs` `e2e_crossref_live_smoke`
+- **现象**: 之前只测源码逻辑，未验证真实 API 运行（审查者 P1"定期在线冒烟"）
+- **修复**: 加 `#[ignore]` 的 e2e 测试，打真实 Crossref — 已知 DOI 成功回读 + 不存在 DOI 必须 Err；默认不跑（离线 CI 不挂），手动 `-- --ignored` 或接 networked smoke job
+- **实测**: 本地 `-- --ignored` 通过（known DOI round-trip + 404 路径正确）✓
+
+## 待修
 
 ### P2: arXiv 条目类型固定 `@article`
 - **位置**: `src/provider/arxiv.rs`

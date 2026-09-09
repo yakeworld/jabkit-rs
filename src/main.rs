@@ -149,7 +149,12 @@ async fn main() -> Result<()> {
                     },
                     None => "",
                 };
-                println!("  {}{}", p.name(), key_status);
+                let stub_status = if p.is_stub() {
+                    " [stub — no API]"
+                } else {
+                    ""
+                };
+                println!("  {}{}{}", p.name(), key_status, stub_status);
             }
 
             if has_keys {
@@ -200,6 +205,37 @@ mod tests {
     use crate::bibtex::{BibEntry, EntryType, Field};
     use crate::cli::{Cli, Commands};
     use clap::Parser;
+
+    /// End-to-end smoke test against the live Crossref API.
+    /// `#[ignore]` so it does not run in offline CI; enable explicitly with:
+    ///   cargo test --release -- --ignored --nocapture
+    /// (or wire into a scheduled online-smoke job that has network egress).
+    #[tokio::test]
+    #[ignore = "hits the live Crossref API; run manually or in a networked smoke job"]
+    async fn e2e_crossref_live_smoke() {
+        use crate::provider::crossref::CrossRef;
+        use crate::provider::Provider;
+        let cr = CrossRef;
+
+        // 1) A DOI we know is registered → must succeed and carry the DOI back.
+        let good = cr
+            .fetch_by_id("10.3389/fneur.2018.00569")
+            .await
+            .expect("live Crossref fetch of a known DOI should succeed");
+        assert!(
+            good.get(Field::Doi)
+                .is_some_and(|d| d.contains("10.3389/fneur.2018.00569")),
+            "DOI should round-trip, got: {:?}",
+            good.get(Field::Doi)
+        );
+
+        // 2) A DOI guaranteed not to exist → must return Err (not panic, not empty).
+        let bad = cr.fetch_by_id("10.9999999/definitely-not-a-real-doi.199999");
+        assert!(
+            bad.await.is_err(),
+            "unknown DOI must yield an error, not a silent success"
+        );
+    }
 
     #[test]
     fn test_fetch_command() {
@@ -400,6 +436,105 @@ mod tests {
         assert!(bib.starts_with("@inbook{smith2020,"));
         assert!(bib.contains("booktitle = {Great Encyclopedia}"));
         assert!(!bib.contains("journal = "));
+    }
+
+    #[test]
+    fn test_brace_balanced_preserved() {
+        // Intentional brace-protection of capitals must survive
+        let mut e = BibEntry::new(EntryType::Article);
+        e.set_field(Field::Title, "{N}ystagmus and {V}OR".into());
+        e.set_field(Field::Year, "2024".into());
+        let bib = e.to_bibtex();
+        assert!(
+            bib.contains("title = {{N}ystagmus and {V}OR}"),
+            "got: {}",
+            bib
+        );
+    }
+
+    #[test]
+    fn test_brace_stray_open_escaped() {
+        // More `{` than `}` → the unpaired `{` is escaped
+        let mut e = BibEntry::new(EntryType::Article);
+        e.set_field(Field::Title, "Formula E = mc{2".into());
+        e.set_field(Field::Year, "2024".into());
+        let bib = e.to_bibtex();
+        // The unpaired '{' becomes '\{' so the field body is well-formed
+        assert!(bib.contains(r"mc\{2"), "got: {}", bib);
+    }
+
+    #[test]
+    fn test_brace_stray_close_escaped() {
+        // More `}` than `{` → the unpaired `}` is escaped
+        let mut e = BibEntry::new(EntryType::Article);
+        e.set_field(Field::Title, "Ratio 1:2}3".into());
+        e.set_field(Field::Year, "2024".into());
+        let bib = e.to_bibtex();
+        assert!(bib.contains(r"1:2\}3"), "got: {}", bib);
+    }
+
+    #[test]
+    fn test_brace_nested_balanced_untouched() {
+        // Nested but balanced groups pass through unchanged
+        let mut e = BibEntry::new(EntryType::Article);
+        e.set_field(Field::Title, "Outer {mid {inner} text} tail".into());
+        e.set_field(Field::Year, "2024".into());
+        let bib = e.to_bibtex();
+        assert!(
+            bib.contains("title = {Outer {mid {inner} text} tail}"),
+            "got: {}",
+            bib
+        );
+    }
+
+    #[test]
+    fn test_brace_output_roundtrip_parens_balanced() {
+        // The rendered field body must have equal counts of *unescaped* `{` and
+        // `}` (i.e. well-formed). We escape the value, then verify that the
+        // number of backslash-escaped braces exactly equals the number that
+        // were unpaired in the input.
+        let mut e = BibEntry::new(EntryType::Article);
+        // balanced pair + one stray `}` + one stray `{`
+        let value = "Weird { title } and stray } and {";
+        e.set_field(Field::Title, value.into());
+        e.set_field(Field::Year, "2024".into());
+        let bib = e.to_bibtex();
+
+        // The stray `}` and stray `{` must appear escaped in the output.
+        assert!(
+            bib.contains(r"\}"),
+            "stray close brace should be escaped: {}",
+            bib
+        );
+        assert!(
+            bib.contains(r"\{"),
+            "stray open brace should be escaped: {}",
+            bib
+        );
+        // The balanced group `{ title }` must remain unescaped.
+        assert!(
+            bib.contains("{ title }"),
+            "balanced group must survive: {}",
+            bib
+        );
+
+        // Count unescaped braces in the rendered body: extract between the
+        // first `=` and the final `}` of the title field.
+        let line = bib
+            .lines()
+            .find(|l| l.trim_start().starts_with("title = "))
+            .unwrap();
+        let body = line.trim_start().trim_start_matches("title = ");
+        // unescaped open = total '{' minus escaped "\{" ; same for close.
+        let unesc_open = body.matches('{').count() - body.matches(r"\{").count();
+        let unesc_close = body.matches('}').count() - body.matches(r"\}").count();
+        // The outer wrapping braces contribute 1 open + 1 close; the inner
+        // balanced `{ title }` contributes 1 + 1. Strays are escaped (excluded).
+        assert_eq!(
+            unesc_open, unesc_close,
+            "unescaped braces must be balanced in: {}",
+            body
+        );
     }
 
     #[test]

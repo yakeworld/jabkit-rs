@@ -157,24 +157,83 @@ impl BibEntry {
     }
 }
 
+/// Escape unbalanced braces so the value is a well-formed BibTeX field body.
+///
+/// BibTeX treats `{` and `}` as *balanced* grouping delimiters — a `{` opens a
+/// group and the matching `}` closes it. When an upstream value contains more
+/// `{` than `}` (or vice versa) the parser will swallow following text or
+/// reject the field. To make the value safe we escape every *unpaired* brace
+/// with a backslash (`\{` / `\}`); already-balanced groups are left intact so
+/// that intentional brace-protection of capitals (`{N}ystagmus`) survives.
+fn escape_unbalanced_braces(value: &str) -> String {
+    // First pass: count the running balance to learn which braces are unpaired.
+    // A `{` is "paired" if a later `}` closes it; a `}` is "paired" if a
+    // previous `{` opened it. We mark unpaired `}` (negative balance) and
+    // unpaired `{` (those still open at the end).
+    let chars: Vec<char> = value.chars().collect();
+    let n = chars.len();
+    // depth[i] = brace depth *before* processing chars[i]
+    // We do a forward pass to find which `}` are unpaired (no open `{`), and a
+    // backward pass to find which `{` are unpaired (no closing `}`).
+    let mut unpaired_open = vec![false; n]; // this `{` has no matching `}`
+    let mut unpaired_close = vec![false; n]; // this `}` has no matching `{`
+
+    // Backward pass: a `{` is unpaired if we see it before any `}` to its right
+    // that could close it. Track a stack-like count of available `}`.
+    let mut open_to_close: i32 = 0;
+    for i in (0..n).rev() {
+        match chars[i] {
+            '}' => open_to_close += 1,
+            '{' => {
+                if open_to_close > 0 {
+                    open_to_close -= 1; // this `{` will be closed
+                } else {
+                    unpaired_open[i] = true;
+                }
+            }
+            _ => {}
+        }
+    }
+    // Forward pass: a `}` is unpaired if we see it before any `{` to its left.
+    let mut close_to_open: i32 = 0;
+    for i in 0..n {
+        match chars[i] {
+            '{' => close_to_open += 1,
+            '}' => {
+                if close_to_open > 0 {
+                    close_to_open -= 1; // this `}` closes an earlier `{`
+                } else {
+                    unpaired_close[i] = true;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    let mut out = String::with_capacity(value.len() + 4);
+    for (i, &c) in chars.iter().enumerate() {
+        match c {
+            '{' if unpaired_open[i] => out.push_str("\\{"),
+            '}' if unpaired_close[i] => out.push_str("\\}"),
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
 fn format_bibtex_value(value: &str, field: &Field) -> String {
+    // All field values pass through brace-balancing so a stray upstream brace
+    // cannot corrupt the surrounding BibTeX.
+    let safe = escape_unbalanced_braces(value);
     match field {
         Field::Author | Field::Title | Field::Journal => {
-            // Preserve existing braces, add outer braces
-            if value.starts_with('{') && value.ends_with('}') {
-                value.to_string()
+            if safe.starts_with('{') && safe.ends_with('}') {
+                safe
             } else {
-                format!("{{{}}}", value)
+                format!("{{{safe}}}")
             }
         }
-        Field::Abstract => {
-            // Abstract often long, wrap in braces
-            format!("{{{}}}", value)
-        }
-        _ => {
-            // Numbers/DOIs don't need braces in most styles
-            format!("{{{}}}", value)
-        }
+        _ => format!("{{{safe}}}"),
     }
 }
 
