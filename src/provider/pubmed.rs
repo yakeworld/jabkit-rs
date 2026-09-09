@@ -79,7 +79,9 @@ impl Provider for PubMed {
     fn name(&self) -> &'static str {
         "Medline/PubMed"
     }
-    fn key_env(&self) -> Option<&'static str> { Some("PUBMED_API_KEY") }
+    fn key_env(&self) -> Option<&'static str> {
+        Some("PUBMED_API_KEY")
+    }
 
     async fn search(&self, query: &str, limit: usize) -> Result<SearchResult> {
         // Step 1: esearch to get PMIDs
@@ -103,7 +105,10 @@ impl Provider for PubMed {
             anyhow::bail!("PubMed esearch {}: {}", resp.status(), resp.text().await?);
         }
 
-        let search_resp: ESearchResponse = resp.json().await.context("Failed to parse esearch response")?;
+        let search_resp: ESearchResponse = resp
+            .json()
+            .await
+            .context("Failed to parse esearch response")?;
         let pmids = search_resp.esearchresult.idlist;
         let total_found = search_resp
             .esearchresult
@@ -136,10 +141,15 @@ impl Provider for PubMed {
             .await?;
 
         if !resp2.status().is_success() {
-            anyhow::bail!("PubMed esummary {}: {}", resp2.status(), resp2.text().await?);
+            anyhow::bail!(
+                "PubMed esummary {}: {}",
+                resp2.status(),
+                resp2.text().await?
+            );
         }
 
-        let summary_resp: ESummaryResponse = resp2.json().await.context("Failed to parse esummary")?;
+        let summary_resp: ESummaryResponse =
+            resp2.json().await.context("Failed to parse esummary")?;
 
         let entries: Vec<BibEntry> = pmids
             .into_iter()
@@ -168,10 +178,8 @@ impl Provider for PubMed {
 
                 // Authors
                 if let Some(authors) = &paper.authors {
-                    let names: Vec<String> = authors
-                        .iter()
-                        .filter_map(|a| a.name.clone())
-                        .collect();
+                    let names: Vec<String> =
+                        authors.iter().filter_map(|a| a.name.clone()).collect();
                     if !names.is_empty() {
                         entry.set_field(Field::Author, names.join(" and "));
                     }
@@ -181,7 +189,10 @@ impl Provider for PubMed {
             })
             .collect();
 
-        Ok(SearchResult { entries, total_found })
+        Ok(SearchResult {
+            entries,
+            total_found,
+        })
     }
 
     async fn fetch_by_id(&self, id: &str) -> Result<BibEntry> {
@@ -202,11 +213,7 @@ impl Provider for PubMed {
 
         let s: ESummaryResponse = resp.json().await?;
 
-        let paper = s
-            .result
-            .papers
-            .get(pmid)
-            .context("PMID not found")?;
+        let paper = s.result.papers.get(pmid).context("PMID not found")?;
 
         let mut entry = BibEntry::new(EntryType::Article);
         entry.set_field(Field::Pmid, paper.uid.clone().unwrap_or(pmid.to_string()));

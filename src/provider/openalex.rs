@@ -100,8 +100,12 @@ struct OASubfield {
 
 #[async_trait]
 impl Provider for OpenAlex {
-    fn name(&self) -> &'static str { "OpenAlex" }
-    fn key_env(&self) -> Option<&'static str> { Some("OPENALEX_API_KEY") }
+    fn name(&self) -> &'static str {
+        "OpenAlex"
+    }
+    fn key_env(&self) -> Option<&'static str> {
+        Some("OPENALEX_API_KEY")
+    }
 
     async fn search(&self, query: &str, limit: usize) -> Result<SearchResult> {
         let url = format!(
@@ -167,9 +171,17 @@ impl Provider for OpenAlex {
     async fn fetch_by_id(&self, id: &str) -> Result<BibEntry> {
         let url = format!("https://api.openalex.org/works/{}", urlencoding(id));
         let client = super::http_client();
-        let resp = client.get(&url).header("User-Agent", "jabkit/0.1").send().await?;
+        let resp = client
+            .get(&url)
+            .header("User-Agent", "jabkit/0.1")
+            .send()
+            .await?;
         if !resp.status().is_success() {
-            anyhow::bail!("OpenAlex fetch_by_id {}: {}", resp.status(), resp.text().await?);
+            anyhow::bail!(
+                "OpenAlex fetch_by_id {}: {}",
+                resp.status(),
+                resp.text().await?
+            );
         }
 
         let r: OAWork = resp.json().await?;
@@ -203,7 +215,7 @@ impl Provider for OpenAlex {
 fn type_from_oa(typ: &Option<String>) -> EntryType {
     match typ.as_deref() {
         Some("article") | Some("journal-article") => EntryType::Article,
-        Some("book-chapter") => EntryType::InProceedings,
+        Some("book-chapter") => EntryType::InBook,
         Some("book") => EntryType::Book,
         Some("proceedings") => EntryType::Proceedings,
         Some("dataset") => EntryType::Misc,

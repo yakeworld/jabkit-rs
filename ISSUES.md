@@ -66,12 +66,12 @@
 - **现象**: macOS 目标在 ubuntu-latest 上跑（无交叉工具链）、无测试步骤、产物名与 README 不一致
 - **修复**:
   - 加 `test` job（`cargo test --release`），build 依赖 test
-  - macOS 目标改用 `macos-latest` runner（原生编译）
-  - 加 `aarch64-unknown-linux-gnu` 目标
+  - macOS 目标改用 `macos-latest` runner（原生编译 aarch64 + x86_64）
   - `fail-fast: false`（一个目标失败不阻塞其他）
-  - 产物重命名为 `jabkit-linux-x86_64`/`jabkit-linux-aarch64`/`jabkit-windows-x86_64.exe`/`jabkit-macos-x86_64`/`jabkit-macos-aarch64`
+  - 产物重命名为 `jabkit-linux-x86_64`/`jabkit-windows-x86_64.exe`/`jabkit-macos-x86_64`/`jabkit-macos-aarch64`
   - 与 README 下载路径对齐
 - **实测**: YAML 语法正确（lint ok），需 push tag 触发实际验证
+- **遗留**: `aarch64-unknown-linux-gnu` 目标未加入（ubuntu 交叉工具链缺失），如需 Linux ARM 产物后续补
 
 ### BibTeX 引用键无冲突消解
 - **位置**: `src/main.rs` Fetch 循环
@@ -85,6 +85,47 @@
 - **现象**: `print!` 无换行，管道拼接时条目粘连
 - **修复**: 全部改为 `println!`（Fetch 循环 + GetById 单条）
 - **实测**: 编译通过，输出格式正确
+
+## 已修（2026-09-09 — 外部评审 P0 批量修复）
+
+### book-chapter → `@inbook` + `booktitle` 字段
+- **位置**: `src/bibtex.rs`（新增 `InBook` 类型 + `Booktitle` 字段）、`src/provider/crossref.rs`、`src/provider/openalex.rs`
+- **现象**: Crossref `book-chapter` 映射为 `InProceedings`，书籍章节与会议论文混为一类；容器名落入 `journal` 而非 `booktitle`
+- **修复**: 新增 `EntryType::InBook` + `Field::Booktitle`；crossref/openalex 的 `book-chapter` 改映射到 `InBook`；`set_container()` helper 按条目类型决定容器名放 `booktitle` 还是 `journal`
+- **回归测试**: `test_inbook_rendering`（断言 `@inbook{}` + `booktitle` 字段 + 无 `journal`）
+- **实测**: DOI 10.1007/978-3-540-29678-2_6294 → `@inbook{doi_101007978-3-540-29678-26294, booktitle = {Encyclopedia of Neuroscience}}` ✓
+
+### 中文/非 ASCII 作者引用键 → DOI 回退
+- **位置**: `src/bibtex.rs` `generate_key()`
+- **现象**: 中文作者（如"王, 晓凯"）生成 `王2024` 键，LaTeX 跨语言库合并隐患
+- **修复**: `generate_key()` 先过滤非 ASCII 字符；无可用 ASCII 作者名时回退到 DOI 派生键（`doi_10...`）；无 DOI 且无作者时回退 `nauthor_YYYY`
+- **回归测试**: `test_bibtex_key_cjk_author_with_doi`（`王, 晓凯` + DOI → `doi_103760cmaj202401001`）、`test_bibtex_key_cjk_author_no_doi`（`王, 晓凯` 无 DOI → `nauthor_2024`）、`test_bibtex_key_no_author_with_doi`、`test_bibtex_key_no_author_no_doi`
+- **实测**: Crossref BPPV 30 条 → 0 个中文键、0 个 unknown 键（之前 3 个 unknown）✓
+
+### doi-to-bibtex 批量退出码 + 键去重
+- **位置**: `src/main.rs` `Commands::DoiToBibtex`、`src/cli.rs`（新增 `--strict`）
+- **现象**: 部分 DOI 失败时进程恒 exit 1，stdout 已有正确 BibTeX 但脚本判定失败；doi-to-bibtex 路径无键去重
+- **修复**: 默认行为 = 全失败 exit 1 / 部分失败 exit 0 + stderr warning / 全成功 exit 0；`--strict` 使任何失败都 exit 1；批量输出复用 `deduplicate_keys()` 公共函数
+- **回归测试**: `test_doi_to_bibtex_command`（默认 strict=false）、`test_doi_to_bibtex_strict_flag`（--strict → true）
+- **实测**: 1 好 + 1 坏 → exit 0 + BibTeX ✓；--strict 1 好 + 1 坏 → exit 1 ✓；2 坏 → exit 1 ✓
+
+### Keyring account 名兼容 + secret-tool 5s 超时
+- **位置**: `src/keyring.rs` `with_keyring_fallback()` + `secret_tool_lookup()`
+- **现象**: README 示例 `account S2_API_KEY`，代码查 `account SemanticScholar`，按文档存必失败；secret-tool 无超时，keyring daemon 挂起时阻塞 CLI
+- **修复**: 每个 key 先查显示标签再查 env var 名（双格式兼容）；`secret_tool_lookup` 改为 mpsc channel + `recv_timeout(5s)`，超时返回 None
+- **实测**: 编译通过，secret-tool 正常时 <100ms 返回 ✓
+
+### BiodiversityHL URL 修复
+- **位置**: `src/provider/stubs.rs`
+- **现象**: URL 字符串 `https://www.biodiversitylibrary.org/api2/http://www.biodiversitylibrary.org/api2/GetSearchResults` 把完整 URL 当 path 拼接
+- **修复**: 改为 `http://www.biodiversitylibrary.org/api2/GetSearchResults`
+- **实测**: 编译通过 ✓
+
+### 键去重逻辑提取为公共函数
+- **位置**: `src/bibtex.rs` `deduplicate_keys()`、`src/main.rs`
+- **现象**: fetch 路径有内联 HashMap 去重，doi-to-bibtex 路径无；测试 `test_citation_key_dedup` 复制了生产逻辑
+- **修复**: 提取 `deduplicate_keys(&mut [BibEntry])` 到 `bibtex.rs`；fetch 和 doi-to-bibtex 共用；测试改为直接调用生产函数
+- **回归测试**: `test_citation_key_dedup`（4 条含 3 条重复 → 4 个唯一键，直接调 `deduplicate_keys`）
 
 ## 待修
 

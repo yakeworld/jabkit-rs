@@ -66,8 +66,12 @@ struct CoreQuery {
 
 #[async_trait]
 impl Provider for Core {
-    fn name(&self) -> &'static str { "CORE" }
-    fn key_env(&self) -> Option<&'static str> { Some("CORE_API_KEY") }
+    fn name(&self) -> &'static str {
+        "CORE"
+    }
+    fn key_env(&self) -> Option<&'static str> {
+        Some("CORE_API_KEY")
+    }
 
     async fn search(&self, query: &str, limit: usize) -> Result<SearchResult> {
         let body = CoreQuery {
@@ -75,10 +79,19 @@ impl Provider for Core {
             limit: limit.min(100) as i64,
             offset: 0,
             fields: Some(vec![
-                "title".into(), "doi".into(), "year".into(), "authors".into(),
-                "journalName".into(), "publisher".into(), "documentType".into(),
-                "abstract".into(), "language".into(), "outputs".into(),
-                "citationCount".into(), "datePublished".into(), "fieldsOfStudy".into(),
+                "title".into(),
+                "doi".into(),
+                "year".into(),
+                "authors".into(),
+                "journalName".into(),
+                "publisher".into(),
+                "documentType".into(),
+                "abstract".into(),
+                "language".into(),
+                "outputs".into(),
+                "citationCount".into(),
+                "datePublished".into(),
+                "fieldsOfStudy".into(),
             ]),
         };
 
@@ -102,41 +115,50 @@ impl Provider for Core {
         let cr: CoreResponse = resp.json().await?;
         let total_found = cr.total_hits.unwrap_or(0) as usize;
 
-        let entries: Vec<BibEntry> = cr.results.into_iter().filter_map(|r| {
-            let doi = r.doi.as_deref().unwrap_or("").to_string();
-            let pmid = r.outputs.as_ref()
-                .and_then(|o| o.first())
-                .and_then(|u| {
+        let entries: Vec<BibEntry> = cr
+            .results
+            .into_iter()
+            .map(|r| {
+                let doi = r.doi.as_deref().unwrap_or("").to_string();
+                let _pmid = r.outputs.as_ref().and_then(|o| o.first()).and_then(|u| {
                     if u.starts_with("https://api.core.ac.uk/v3/outputs/") {
-                        u.trim_start_matches("https://api.core.ac.uk/v3/outputs/").to_string().into()
-                    } else { None }
+                        u.trim_start_matches("https://api.core.ac.uk/v3/outputs/")
+                            .to_string()
+                            .into()
+                    } else {
+                        None
+                    }
                 });
 
-            let mut entry = BibEntry::new(EntryType::Article);
-            entry.set_field(Field::Title, r.title.unwrap_or_default());
-            if let Some(y) = r.year {
-                entry.set_field(Field::Year, y.to_string());
-            }
-            if let Some(d) = r.date_published {
-                if d.len() >= 4 {
-                    entry.set_field(Field::Year, d[..4].to_string());
+                let mut entry = BibEntry::new(EntryType::Article);
+                entry.set_field(Field::Title, r.title.unwrap_or_default());
+                if let Some(y) = r.year {
+                    entry.set_field(Field::Year, y.to_string());
                 }
-            }
-            if let Some(authors) = r.authors {
-                let names: Vec<String> = authors.into_iter().filter_map(|a| a.name).collect();
-                entry.set_field(Field::Author, names.join(" and "));
-            }
-            entry.set_field(Field::Journal, r.journal_name.unwrap_or_default());
-            entry.set_field(Field::Publisher, r.publisher.unwrap_or_default());
-            entry.set_field(Field::Doi, doi);
-            entry.set_field(Field::Abstract, r.abstract_text.unwrap_or_default());
-            if let Some(c) = r.citation_count {
-                entry.set_field(Field::Note, format!("cited:{}", c));
-            }
-            Some(entry)
-        }).collect();
+                if let Some(d) = r.date_published {
+                    if d.len() >= 4 {
+                        entry.set_field(Field::Year, d[..4].to_string());
+                    }
+                }
+                if let Some(authors) = r.authors {
+                    let names: Vec<String> = authors.into_iter().filter_map(|a| a.name).collect();
+                    entry.set_field(Field::Author, names.join(" and "));
+                }
+                entry.set_field(Field::Journal, r.journal_name.unwrap_or_default());
+                entry.set_field(Field::Publisher, r.publisher.unwrap_or_default());
+                entry.set_field(Field::Doi, doi);
+                entry.set_field(Field::Abstract, r.abstract_text.unwrap_or_default());
+                if let Some(c) = r.citation_count {
+                    entry.set_field(Field::Note, format!("cited:{}", c));
+                }
+                entry
+            })
+            .collect();
 
-        Ok(SearchResult { entries, total_found })
+        Ok(SearchResult {
+            entries,
+            total_found,
+        })
     }
 
     async fn fetch_by_id(&self, id: &str) -> Result<BibEntry> {

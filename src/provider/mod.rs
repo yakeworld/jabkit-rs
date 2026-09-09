@@ -31,7 +31,9 @@ pub struct SearchResult {
 #[async_trait]
 pub trait Provider: Send + Sync {
     fn name(&self) -> &'static str;
-    fn key_env(&self) -> Option<&'static str> { None }
+    fn key_env(&self) -> Option<&'static str> {
+        None
+    }
     async fn search(&self, query: &str, limit: usize) -> Result<SearchResult>;
     async fn fetch_by_id(&self, id: &str) -> Result<BibEntry>;
 }
@@ -67,9 +69,7 @@ pub fn all_providers(keys: &ApiKeys) -> Vec<Box<dyn Provider>> {
         Box::new(stubs::Lobid),
         Box::new(stubs::Doab),
         // Key required
-        Box::new(core::Core::new(
-            keys.get("CORE_API_KEY").map(String::from),
-        )),
+        Box::new(core::Core::new(keys.get("CORE_API_KEY").map(String::from))),
         Box::new(semantic_scholar::SemanticScholar::new(
             keys.get("S2_API_KEY").map(String::from),
         )),
@@ -79,21 +79,15 @@ pub fn all_providers(keys: &ApiKeys) -> Vec<Box<dyn Provider>> {
         Box::new(openalex::OpenAlex::new(
             keys.get("OPENALEX_API_KEY").map(String::from),
         )),
-        Box::new(ieee::Ieee::new(
-            keys.get("IEEE_API_KEY").map(String::from),
-        )),
+        Box::new(ieee::Ieee::new(keys.get("IEEE_API_KEY").map(String::from))),
         Box::new(springer::Springer::new(
             keys.get("SPRINGER_API_KEY").map(String::from),
         )),
         Box::new(scopus::Scopus::new(
             keys.get("SCOPUS_API_KEY").map(String::from),
         )),
-        Box::new(acm::Acm::new(
-            keys.get("ACM_API_KEY").map(String::from),
-        )),
-        Box::new(ads::Ads::new(
-            keys.get("ADS_API_KEY").map(String::from),
-        )),
+        Box::new(acm::Acm::new(keys.get("ACM_API_KEY").map(String::from))),
+        Box::new(ads::Ads::new(keys.get("ADS_API_KEY").map(String::from))),
         Box::new(unpaywall::Unpaywall::new(
             keys.get("UNPAYWALL_EMAIL").map(String::from),
         )),

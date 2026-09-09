@@ -7,7 +7,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: cargo test --release
+      - run: cargo test --release --locked
 
   build:
     needs: test
@@ -27,12 +27,24 @@ jobs:
       - run: rustup target add ${{ matrix.target }}
       - run: sudo apt-get update && sudo apt-get install -y mingw-w64
         if: contains(matrix.target, 'windows')
-      - run: cargo build --release --target ${{ matrix.target }}
+      - run: cargo build --release --locked --target ${{ matrix.target }}
       - name: Rename artifact
         run: |
           mv "target/${{ matrix.target }}/release/jabkit${{ matrix.ext }}" "${{ matrix.artifact }}${{ matrix.ext }}"
+      - name: Generate checksum
+        if: runner.os == 'Linux'
+        run: sha256sum "${{ matrix.artifact }}${{ matrix.ext }}" > "${{ matrix.artifact }}${{ matrix.ext }}.sha256"
+      - name: Generate checksum (macOS)
+        if: runner.os == 'macOS'
+        run: shasum -a 256 "${{ matrix.artifact }}${{ matrix.ext }}" > "${{ matrix.artifact }}${{ matrix.ext }}.sha256"
+      - name: Generate checksum (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: (Get-FileHash -Algorithm SHA256 "${{ matrix.artifact }}${{ matrix.ext }}").Hash.ToLower() + "  ${{ matrix.artifact }}${{ matrix.ext }}" | Out-File -FilePath "${{ matrix.artifact }}${{ matrix.ext }}.sha256" -Encoding ascii
       - name: Upload
         uses: softprops/action-gh-release@v2
         with:
-          files: "${{ matrix.artifact }}${{ matrix.ext }}"
+          files: |
+            ${{ matrix.artifact }}${{ matrix.ext }}
+            ${{ matrix.artifact }}${{ matrix.ext }}.sha256
           fail_on_unmatched_files: true

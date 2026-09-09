@@ -77,13 +77,24 @@ impl Provider for SemanticScholar {
     fn name(&self) -> &'static str {
         "SemanticScholar"
     }
-    fn key_env(&self) -> Option<&'static str> { Some("S2_API_KEY") }
+    fn key_env(&self) -> Option<&'static str> {
+        Some("S2_API_KEY")
+    }
 
     async fn search(&self, query: &str, limit: usize) -> Result<SearchResult> {
         let fields = [
-            "title", "year", "authors", "journal", "externalIds",
-            "abstract", "citationCount", "publicationTypes",
-            "publicationDate", "venue", "url", "referenceCount",
+            "title",
+            "year",
+            "authors",
+            "journal",
+            "externalIds",
+            "abstract",
+            "citationCount",
+            "publicationTypes",
+            "publicationDate",
+            "venue",
+            "url",
+            "referenceCount",
         ]
         .join(",");
 
@@ -112,24 +123,21 @@ impl Provider for SemanticScholar {
         let entries: Vec<BibEntry> = s2
             .data
             .into_iter()
-            .filter_map(|p| {
+            .map(|p| {
                 let doi = p
                     .external_ids
                     .as_ref()
                     .and_then(|id| id.doi.clone())
                     .unwrap_or_default();
-                let pmid = p
-                    .external_ids
-                    .as_ref()
-                    .and_then(|id| id.pubmed.clone());
-                let arxiv = p
-                    .external_ids
-                    .as_ref()
-                    .and_then(|id| id.arxiv.clone());
+                let pmid = p.external_ids.as_ref().and_then(|id| id.pubmed.clone());
+                let arxiv = p.external_ids.as_ref().and_then(|id| id.arxiv.clone());
 
                 let mut entry = BibEntry::new(EntryType::Article);
                 entry.set_field(Field::Title, p.title.unwrap_or_default());
-                entry.set_field(Field::Year, p.year.map(|y| y.to_string()).unwrap_or_default());
+                entry.set_field(
+                    Field::Year,
+                    p.year.map(|y| y.to_string()).unwrap_or_default(),
+                );
 
                 if let Some(j) = p.journal {
                     entry.set_field(Field::Journal, j.name.unwrap_or_default());
@@ -138,14 +146,17 @@ impl Provider for SemanticScholar {
                 }
 
                 if let Some(venue) = p.venue {
-                    if entry.get(Field::Journal).map(|s| s.is_empty()).unwrap_or(true) {
+                    if entry
+                        .get(Field::Journal)
+                        .map(|s| s.is_empty())
+                        .unwrap_or(true)
+                    {
                         entry.set_field(Field::Journal, venue);
                     }
                 }
 
                 if let Some(authors) = p.authors {
-                    let names: Vec<String> =
-                        authors.into_iter().filter_map(|a| a.name).collect();
+                    let names: Vec<String> = authors.into_iter().filter_map(|a| a.name).collect();
                     entry.set_field(Field::Author, names.join(" and "));
                 }
 
@@ -167,7 +178,7 @@ impl Provider for SemanticScholar {
                     }
                 }
 
-                Some(entry)
+                entry
             })
             .collect();
 
@@ -210,7 +221,11 @@ impl Provider for SemanticScholar {
         {
             entry.set_field(Field::Doi, doi.to_string());
         }
-        if let Some(j) = v.get("journal").and_then(|j| j.get("name")).and_then(|n| n.as_str()) {
+        if let Some(j) = v
+            .get("journal")
+            .and_then(|j| j.get("name"))
+            .and_then(|n| n.as_str())
+        {
             entry.set_field(Field::Journal, j.to_string());
         }
         if let Some(authors) = v.get("authors").and_then(|a| a.as_array()) {
@@ -227,7 +242,7 @@ impl Provider for SemanticScholar {
 
 fn urlencoding(s: &str) -> String {
     s.split(' ')
-        .map(|part| urlencoding_inner(part))
+        .map(urlencoding_inner)
         .collect::<Vec<_>>()
         .join("%20")
 }

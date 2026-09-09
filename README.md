@@ -7,7 +7,7 @@ Single binary, fast startup (vs ~15s Java original). Supports 26 academic provid
 ## Features
 
 - 🚀 **Fast startup** — Rust native binary, no JVM, no Gradle
-- 📦 **Single binary** ~3.5MB (vs 176MB JRE bundle)
+- 📦 **Single binary** ~4.0MB (vs 176MB JRE bundle)
 - 🔍 **26 providers**: Crossref, arXiv, DBLP, DOAJ, EuropePMC, INSPIRE, SemanticScholar, Medline/PubMed, OpenAlex, Scopus, CORE, IEEE, Springer, ACM, ADS, Unpaywall, BiodiversityHL + 9 registered stubs
 - 📝 **BibTeX output** — pipe directly to `lit-import`
 - 🔑 **API key chain**: env var → `.env` file → GNOME Keyring
@@ -20,9 +20,13 @@ Single binary, fast startup (vs ~15s Java original). Supports 26 academic provid
 
 ```bash
 # Download binary
-curl -sL https://github.com/yakeworld/jabkit-rs/releases/latest/download/jabkit-linux-x86_64 -o jabkit-rs
-chmod +x jabkit-rs
-sudo mv jabkit-rs /usr/local/bin/
+curl -sL https://github.com/yakeworld/jabkit-rs/releases/latest/download/jabkit-linux-x86_64 -o jabkit
+
+# Verify checksum (published as jabkit-linux-x86_64.sha256 in the same release)
+sha256sum -c jabkit-linux-x86_64.sha256
+
+chmod +x jabkit
+sudo mv jabkit /usr/local/bin/
 
 # Or build from source
 git clone https://github.com/yakeworld/jabkit-rs.git
@@ -33,27 +37,31 @@ cargo build --release
 
 ### Windows
 
-Download `jabkit.exe` from [Releases](https://github.com/yakeworld/jabkit-rs/releases).
+Download `jabkit-windows-x86_64.exe` from [Releases](https://github.com/yakeworld/jabkit-rs/releases), rename to `jabkit.exe`.
+
+### macOS
+
+Download `jabkit-macos-aarch64` (Apple Silicon) or `jabkit-macos-x86_64` (Intel) from [Releases](https://github.com/yakeworld/jabkit-rs/releases).
 
 ## Quick Start
 
 ```bash
 # Search academic literature (provider is required)
-jabkit-rs fetch --provider Crossref -q "3D eye movement nystagmus" --limit 20
+jabkit fetch --provider Crossref -q "3D eye movement nystagmus" --limit 20
 
 # Search arXiv
-jabkit-rs fetch --provider arXiv -q "nystagmus" --limit 10
+jabkit fetch --provider arXiv -q "nystagmus" --limit 10
 
 # Convert DOI to BibTeX
-jabkit-rs doi-to-bibtex 10.1016/j.cmpb.2023.107526
+jabkit doi-to-bibtex 10.1016/j.cmpb.2023.107526
 
 # List available providers and key status
-jabkit-rs list-providers
+jabkit list-providers
 
 # Fetch by ID
-jabkit-rs get-by-id --provider Crossref --id 10.1007/s00417-023-06145-3
-jabkit-rs get-by-id --provider "Medline/PubMed" --id 37488184
-jabkit-rs get-by-id --provider arXiv --id 2306.12345
+jabkit get-by-id --provider Crossref --id 10.1007/s00417-023-06145-3
+jabkit get-by-id --provider "Medline/PubMed" --id 37488184
+jabkit get-by-id --provider arXiv --id 2306.12345
 ```
 
 ## Usage
@@ -61,7 +69,7 @@ jabkit-rs get-by-id --provider arXiv --id 2306.12345
 ### `fetch` — Search academic databases
 
 ```bash
-jabkit-rs fetch [OPTIONS] -q <QUERY>
+jabkit fetch [OPTIONS] -q <QUERY>
 
 Options:
   -q, --query <QUERY>       Search query [required]
@@ -74,25 +82,28 @@ Options:
 ### `doi-to-bibtex` — DOI to BibTeX (via Crossref)
 
 ```bash
-jabkit-rs doi-to-bibtex <DOI> [DOI...]
-jabkit-rs doi-to-bibtex 10.1007/s00417-023-06145-3 10.1038/s41598-023-37339-8
+jabkit doi-to-bibtex <DOI> [DOI...]
+jabkit doi-to-bibtex 10.1007/s00417-023-06145-3 10.1038/s41598-023-37339-8
+
+# Fail the whole command if ANY DOI fails (for scripted batch ingest)
+jabkit doi-to-bibtex --strict 10.1007/s00417-023-06145-3 10.9999/fake.doi
 ```
 
-Returns non-zero exit code if any DOI fails. Use `--porcelain` for BibTeX-only stdout.
+Exit codes: `0` = all DOIs succeeded, or some failed but at least one succeeded (default; failures go to stderr). `1` = all DOIs failed, or any DOI failed with `--strict`. Use `--porcelain` for BibTeX-only stdout.
 
 ### `get-by-id` — Fetch by identifier
 
 ```bash
-jabkit-rs get-by-id --provider <PROVIDER> --id <ID>
-jabkit-rs get-by-id --provider Crossref --id 10.1007/s00417-023-06145-3
-jabkit-rs get-by-id --provider "Medline/PubMed" --id 37488184
-jabkit-rs get-by-id --provider arXiv --id 2306.12345
+jabkit get-by-id --provider <PROVIDER> --id <ID>
+jabkit get-by-id --provider Crossref --id 10.1007/s00417-023-06145-3
+jabkit get-by-id --provider "Medline/PubMed" --id 37488184
+jabkit get-by-id --provider arXiv --id 2306.12345
 ```
 
 ### `list-providers` — Show provider status
 
 ```bash
-jabkit-rs list-providers
+jabkit list-providers
 ```
 
 Output:
@@ -114,7 +125,7 @@ Available providers:
 ### `init` — Create .env template
 
 ```bash
-jabkit-rs init
+jabkit init
 ```
 
 Creates `.env` in current directory with all known key names as comments.
@@ -166,15 +177,15 @@ secret-tool store --label="S2_API_KEY" service org.jabref.customapikeys account 
 ## Porcelain Mode (script-friendly)
 
 ```bash
-jabkit-rs fetch --provider Crossref -q "3D eye" --limit 5 --porcelain
+jabkit fetch --provider Crossref -q "3D eye" --limit 5 --porcelain
 # Output: BibTeX only, no log lines. Pipe to lit-import:
-jabkit-rs fetch --provider Crossref -q "vestibular" --porcelain | lit-import --bib -
+jabkit fetch --provider Crossref -q "vestibular" --porcelain | lit-import --bib -
 ```
 
 ## Proxy Support
 
 ```bash
-jabkit-rs --proxy socks5h://100.65.157.17:9050 fetch --provider Crossref -q "test"
+jabkit --proxy socks5h://100.65.157.17:9050 fetch --provider Crossref -q "test"
 ```
 
 Routes all HTTP requests through the specified SOCKS5/HTTP proxy.

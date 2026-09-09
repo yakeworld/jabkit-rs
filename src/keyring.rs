@@ -14,11 +14,14 @@ pub struct ApiKeys {
 impl std::fmt::Debug for ApiKeys {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut s = f.debug_struct("ApiKeys");
-        s.field("semantic_scholar", &self.semantic_scholar.as_ref().map(|_| "***"));
+        s.field(
+            "semantic_scholar",
+            &self.semantic_scholar.as_ref().map(|_| "***"),
+        );
         s.field("pubmed", &self.pubmed.as_ref().map(|_| "***"));
         s.field("openalex", &self.openalex.as_ref().map(|_| "***"));
         let extra: std::collections::BTreeMap<&String, &str> =
-            self.extra.iter().map(|(k, _)| (k, "***")).collect();
+            self.extra.keys().map(|k| (k, "***")).collect();
         s.field("extra", &extra);
         s.finish()
     }
@@ -27,9 +30,17 @@ impl std::fmt::Debug for ApiKeys {
 impl ApiKeys {
     /// All known env var names for API keys
     const ALL_ENV_KEYS: &'static [&'static str] = &[
-        "CORE_API_KEY", "S2_API_KEY", "SEMANTIC_SCHOLAR_API_KEY", "PUBMED_API_KEY", "OPENALEX_API_KEY",
-        "IEEE_API_KEY", "SCOPUS_API_KEY", "SPRINGER_API_KEY",
-        "ACM_API_KEY", "ADS_API_KEY", "UNPAYWALL_EMAIL",
+        "CORE_API_KEY",
+        "S2_API_KEY",
+        "SEMANTIC_SCHOLAR_API_KEY",
+        "PUBMED_API_KEY",
+        "OPENALEX_API_KEY",
+        "IEEE_API_KEY",
+        "SCOPUS_API_KEY",
+        "SPRINGER_API_KEY",
+        "ACM_API_KEY",
+        "ADS_API_KEY",
+        "UNPAYWALL_EMAIL",
         "BIODIVERSITY_KEY",
     ];
 
@@ -51,17 +62,22 @@ impl ApiKeys {
         }
     }
 
-    /// Fallback: try GNOME Keyring for the 3 well-known JabRef keys
+    /// Fallback: try GNOME Keyring for the 3 well-known JabRef keys.
+    /// Tries both `account <EnvVarName>` (jabkit README format) and
+    /// `account <DisplayLabel>` (JabRef native format) for compatibility.
     pub fn with_keyring_fallback(self) -> Self {
         let mut keys = self;
         if keys.semantic_scholar.is_none() {
-            keys.semantic_scholar = secret_tool_lookup("SemanticScholar");
+            keys.semantic_scholar =
+                secret_tool_lookup("SemanticScholar").or_else(|| secret_tool_lookup("S2_API_KEY"));
         }
         if keys.pubmed.is_none() {
-            keys.pubmed = secret_tool_lookup("Medline/PubMed");
+            keys.pubmed = secret_tool_lookup("Medline/PubMed")
+                .or_else(|| secret_tool_lookup("PUBMED_API_KEY"));
         }
         if keys.openalex.is_none() {
-            keys.openalex = secret_tool_lookup("OpenAlex");
+            keys.openalex =
+                secret_tool_lookup("OpenAlex").or_else(|| secret_tool_lookup("OPENALEX_API_KEY"));
         }
         keys
     }
@@ -87,11 +103,27 @@ impl ApiKeys {
 
 /// Access GNOME Keyring via `secret-tool` CLI.
 /// Supports both plaintext keys and JabRef AES-encrypted blobs.
+/// Times out after 5s to avoid blocking when the keyring daemon is unresponsive.
 fn secret_tool_lookup(account: &str) -> Option<String> {
-    let output = Command::new("secret-tool")
-        .args(["lookup", "service", "org.jabref.customapikeys", "account", account])
-        .output()
-        .ok()?;
+    let account = account.to_string();
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = tx.send(
+            Command::new("secret-tool")
+                .args([
+                    "lookup",
+                    "service",
+                    "org.jabref.customapikeys",
+                    "account",
+                    &account,
+                ])
+                .output(),
+        );
+    });
+    let output = match rx.recv_timeout(std::time::Duration::from_secs(5)) {
+        Ok(Ok(o)) => o,
+        _ => return None,
+    };
     if !output.status.success() {
         return None;
     }
@@ -113,7 +145,8 @@ fn secret_tool_lookup(account: &str) -> Option<String> {
 fn decrypt_jabref(ciphertext_b64: &str) -> Result<String> {
     use sha2::{Digest, Sha256};
     let hostname = std::fs::read_to_string("/proc/sys/kernel/hostname")
-        .ok().map(|s| s.trim().to_string())
+        .ok()
+        .map(|s| s.trim().to_string())
         .unwrap_or_else(|| "localhost".to_string());
     let user = std::env::var("USER").unwrap_or_else(|_| "yakeworld".to_string());
     let key_str = format!("{}-{}", user, hostname);

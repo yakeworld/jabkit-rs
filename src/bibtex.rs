@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 pub enum EntryType {
     Article,
     Book,
+    InBook,
     InProceedings,
     Proceedings,
     Misc,
@@ -14,6 +15,7 @@ impl EntryType {
         match self {
             EntryType::Article => "article",
             EntryType::Book => "book",
+            EntryType::InBook => "inbook",
             EntryType::InProceedings => "inproceedings",
             EntryType::Proceedings => "proceedings",
             EntryType::Misc => "misc",
@@ -26,6 +28,7 @@ pub enum Field {
     Author,
     Title,
     Journal,
+    Booktitle,
     Year,
     Volume,
     Issue,
@@ -47,6 +50,7 @@ impl Field {
             Field::Author => "author",
             Field::Title => "title",
             Field::Journal => "journal",
+            Field::Booktitle => "booktitle",
             Field::Year => "year",
             Field::Volume => "volume",
             Field::Issue => "number",
@@ -89,7 +93,9 @@ impl BibEntry {
         self.fields.get(&field).map(|s| s.as_str())
     }
 
-    /// Generate a citation key from first author + year
+    /// Generate a citation key from first author + year.
+    /// CJK / non-ASCII authors fall back to a DOI-derived key (if available)
+    /// so that LaTeX can compile the key without UTF-8 surprises.
     pub fn generate_key(&mut self) {
         let author = self.fields.get(&Field::Author).cloned().unwrap_or_default();
         let year = self.fields.get(&Field::Year).cloned().unwrap_or_default();
@@ -97,19 +103,34 @@ impl BibEntry {
         let first_author = author
             .split(" and ")
             .next()
-            .unwrap_or("unknown")
+            .unwrap_or("")
             .split(',')
             .next()
-            .unwrap_or("unknown")
+            .unwrap_or("")
             .trim()
-            .to_lowercase()
-            .replace(' ', "_")
-            .replace('-', "_");
+            .to_string();
+
+        // Sanitize: keep only ASCII alphanumerics, spaces, hyphens
+        let ascii_author: String = first_author
+            .chars()
+            .filter(|c| c.is_ascii_alphanumeric() || *c == ' ' || *c == '-')
+            .collect();
+
+        let author_part = ascii_author.to_lowercase().replace([' ', '-'], "_");
 
         let year_part = if year.len() >= 4 { &year[..4] } else { &year };
 
-        if !first_author.is_empty() && !year_part.is_empty() {
-            self.citation_key = format!("{}{}", first_author, year_part);
+        if !author_part.is_empty() && !year_part.is_empty() {
+            self.citation_key = format!("{}{}", author_part, year_part);
+        } else if let Some(doi) = self.fields.get(&Field::Doi) {
+            // No usable author (missing, all-CJK, etc.) → derive key from DOI
+            let doi_clean: String = doi
+                .chars()
+                .filter(|c| c.is_ascii_alphanumeric() || *c == '-')
+                .collect();
+            self.citation_key = format!("doi_{}", doi_clean);
+        } else if !year_part.is_empty() {
+            self.citation_key = format!("nauthor_{}", year_part);
         } else {
             self.citation_key = "unknown".to_string();
         }
@@ -166,4 +187,21 @@ pub fn entries_to_bibtex(entries: &[BibEntry]) -> String {
         result.push('\n');
     }
     result
+}
+
+/// Deduplicate citation keys within a batch.
+/// First occurrence keeps its key; subsequent ones get a letter suffix:
+/// `yang2026` → `yang2026`, `yang2026a`, `yang2026b`, …
+/// Returns the entries with keys already mutated.
+pub fn deduplicate_keys(entries: &mut [BibEntry]) {
+    let mut seen: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    for entry in entries.iter_mut() {
+        let base = entry.citation_key.clone();
+        let count = seen.entry(base.clone()).or_insert(0);
+        *count += 1;
+        if *count > 1 {
+            let suffix = char::from_u32((b'a' as u32) + (*count - 2) as u32).unwrap_or('z');
+            entry.citation_key = format!("{}{}", base, suffix);
+        }
+    }
 }

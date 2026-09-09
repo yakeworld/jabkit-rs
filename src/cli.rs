@@ -65,6 +65,9 @@ pub enum Commands {
     DoiToBibtex {
         #[arg(required = true)]
         dois: Vec<String>,
+        /// Exit with code 1 if any DOI fails (default: exit 0 with warnings)
+        #[arg(long)]
+        strict: bool,
     },
     /// List available providers with key status
     ListProviders,

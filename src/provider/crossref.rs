@@ -132,13 +132,17 @@ impl Provider for CrossRef {
                     entry.set_field(Field::Author, names.join(" and "));
                 }
 
-                entry.set_field(Field::Journal, item.container_title.unwrap_or_default().join("; "));
+                set_container(&mut entry, &item.container_title);
                 entry.set_field(Field::Volume, item.volume.unwrap_or_default());
                 entry.set_field(Field::Issue, item.issue.unwrap_or_default());
                 entry.set_field(Field::Pages, item.page.unwrap_or_default());
                 entry.set_field(Field::Publisher, item.publisher.unwrap_or_default());
 
-                if let Some(d) = item.issued.or(item.published_print).or(item.published_online) {
+                if let Some(d) = item
+                    .issued
+                    .or(item.published_print)
+                    .or(item.published_online)
+                {
                     if let Some(parts) = d.date_parts {
                         if let Some(p) = parts.first() {
                             if let Some(Some(year)) = p.first() {
@@ -164,7 +168,10 @@ impl Provider for CrossRef {
             })
             .collect();
 
-        Ok(SearchResult { entries, total_found })
+        Ok(SearchResult {
+            entries,
+            total_found,
+        })
     }
 
     async fn fetch_by_id(&self, id: &str) -> Result<BibEntry> {
@@ -179,7 +186,11 @@ impl Provider for CrossRef {
             .await?;
 
         if !resp.status().is_success() {
-            anyhow::bail!("Crossref fetch_by_id {}: {}", resp.status(), resp.text().await?);
+            anyhow::bail!(
+                "Crossref fetch_by_id {}: {}",
+                resp.status(),
+                resp.text().await?
+            );
         }
 
         // Single-work response: {"message": {...work object...}} — no "items" wrapper
@@ -219,13 +230,17 @@ impl Provider for CrossRef {
             entry.set_field(Field::Author, names.join(" and "));
         }
 
-        entry.set_field(Field::Journal, item.container_title.unwrap_or_default().join("; "));
+        set_container(&mut entry, &item.container_title);
         entry.set_field(Field::Volume, item.volume.unwrap_or_default());
         entry.set_field(Field::Issue, item.issue.unwrap_or_default());
         entry.set_field(Field::Pages, item.page.unwrap_or_default());
         entry.set_field(Field::Publisher, item.publisher.unwrap_or_default());
 
-        if let Some(d) = item.issued.or(item.published_print).or(item.published_online) {
+        if let Some(d) = item
+            .issued
+            .or(item.published_print)
+            .or(item.published_online)
+        {
             if let Some(parts) = d.date_parts {
                 if let Some(p) = parts.first() {
                     if let Some(Some(year)) = p.first() {
@@ -254,12 +269,28 @@ impl Provider for CrossRef {
 fn type_from_crossref(typ: &Option<String>) -> EntryType {
     match typ.as_deref() {
         Some("journal-article") => EntryType::Article,
-        Some("book-chapter") => EntryType::InProceedings,
+        Some("book-chapter") => EntryType::InBook,
         Some("book") | Some("monograph") => EntryType::Book,
         Some("proceedings-article") => EntryType::InProceedings,
         Some("dissertation") | Some("thesis") => EntryType::Misc,
         Some("dataset") => EntryType::Misc,
         _ => EntryType::Article,
+    }
+}
+
+/// Set the container-title field based on entry type.
+/// Book chapters → `booktitle`, everything else → `journal`.
+fn set_container(entry: &mut BibEntry, container_title: &Option<Vec<String>>) {
+    if let Some(ct) = container_title {
+        let joined = ct.join("; ");
+        if joined.is_empty() {
+            return;
+        }
+        match entry.entry_type {
+            EntryType::InBook => entry.set_field(Field::Booktitle, joined),
+            EntryType::Book => {}
+            _ => entry.set_field(Field::Journal, joined),
+        }
     }
 }
 
