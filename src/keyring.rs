@@ -2,13 +2,35 @@ use anyhow::Result;
 use std::collections::HashMap;
 use std::process::Command;
 
+/// Where a given API key was loaded from. `doctor` prints this (never the
+/// key value) so users can tell whether a key came from the environment, the
+/// GNOME keyring, or is missing entirely.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KeySource {
+    EnvVar,
+    Keyring,
+}
+
+impl KeySource {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            KeySource::EnvVar => "env",
+            KeySource::Keyring => "keyring",
+        }
+    }
+}
+
 /// API keys for all providers. Lookup by env var name.
+///
+/// `sources` records, per env var name, where a present key was loaded from —
+/// used by `doctor`. It never stores key material, only the origin.
 #[derive(Clone, Default)]
 pub struct ApiKeys {
     semantic_scholar: Option<String>,
     pubmed: Option<String>,
     openalex: Option<String>,
     extra: HashMap<String, String>,
+    sources: HashMap<String, KeySource>,
 }
 
 impl std::fmt::Debug for ApiKeys {
@@ -47,39 +69,60 @@ impl ApiKeys {
     /// Load keys from environment variables
     pub fn from_env() -> Self {
         let mut extra = HashMap::new();
+        let mut sources = HashMap::new();
         for key in Self::ALL_ENV_KEYS {
             if let Ok(v) = std::env::var(key) {
                 if !v.is_empty() {
                     extra.insert(key.to_string(), v);
+                    sources.insert(key.to_string(), KeySource::EnvVar);
                 }
             }
         }
+        let semantic_scholar = extra.remove("S2_API_KEY");
+        let pubmed = extra.remove("PUBMED_API_KEY");
+        let openalex = extra.remove("OPENALEX_API_KEY");
         Self {
-            semantic_scholar: extra.remove("S2_API_KEY"),
-            pubmed: extra.remove("PUBMED_API_KEY"),
-            openalex: extra.remove("OPENALEX_API_KEY"),
+            semantic_scholar,
+            pubmed,
+            openalex,
             extra,
+            sources,
         }
     }
 
     /// Fallback: try GNOME Keyring for the 3 well-known JabRef keys.
     /// Tries both `account <EnvVarName>` (jabkit README format) and
     /// `account <DisplayLabel>` (JabRef native format) for compatibility.
-    pub fn with_keyring_fallback(self) -> Self {
-        let mut keys = self;
-        if keys.semantic_scholar.is_none() {
-            keys.semantic_scholar =
-                secret_tool_lookup("SemanticScholar").or_else(|| secret_tool_lookup("S2_API_KEY"));
+    /// Records the winning source as `Keyring` for `doctor`.
+    pub fn with_keyring_fallback(mut self) -> Self {
+        if self.semantic_scholar.is_none() {
+            if let Some(v) = Self::keyring_lookup("SemanticScholar", "S2_API_KEY") {
+                self.sources
+                    .insert("S2_API_KEY".to_string(), KeySource::Keyring);
+                self.semantic_scholar = Some(v);
+            }
         }
-        if keys.pubmed.is_none() {
-            keys.pubmed = secret_tool_lookup("Medline/PubMed")
-                .or_else(|| secret_tool_lookup("PUBMED_API_KEY"));
+        if self.pubmed.is_none() {
+            if let Some(v) = Self::keyring_lookup("Medline/PubMed", "PUBMED_API_KEY") {
+                self.sources
+                    .insert("PUBMED_API_KEY".to_string(), KeySource::Keyring);
+                self.pubmed = Some(v);
+            }
         }
-        if keys.openalex.is_none() {
-            keys.openalex =
-                secret_tool_lookup("OpenAlex").or_else(|| secret_tool_lookup("OPENALEX_API_KEY"));
+        if self.openalex.is_none() {
+            if let Some(v) = Self::keyring_lookup("OpenAlex", "OPENALEX_API_KEY") {
+                self.sources
+                    .insert("OPENALEX_API_KEY".to_string(), KeySource::Keyring);
+                self.openalex = Some(v);
+            }
         }
-        keys
+        self
+    }
+
+    /// Keyring lookup: try `label` first, then `env_name`. Pure (no &mut
+    /// self) so it can be called without borrowing conflicts.
+    fn keyring_lookup(label: &str, env_name: &str) -> Option<String> {
+        secret_tool_lookup(label).or_else(|| secret_tool_lookup(env_name))
     }
 
     /// Get a key by its env var name
@@ -98,6 +141,12 @@ impl ApiKeys {
             || self.pubmed.is_some()
             || self.openalex.is_some()
             || !self.extra.is_empty()
+    }
+
+    /// All env var names that have a loaded key, with their source.
+    /// Sorted (BTreeMap) for stable `doctor` output.
+    pub fn loaded_sources(&self) -> std::collections::BTreeMap<String, KeySource> {
+        self.sources.iter().map(|(k, v)| (k.clone(), *v)).collect()
     }
 }
 

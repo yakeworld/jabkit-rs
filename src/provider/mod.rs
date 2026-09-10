@@ -68,6 +68,89 @@ pub fn http_client() -> reqwest::Client {
         .clone()
 }
 
+/// Default user agent for upstream API calls.
+pub const USER_AGENT: &str = "jabkit/0.1 (mailto:yakeworld@gmail.com)";
+
+/// Bounded, deadline-aware GET that deserialises a JSON body.
+///
+/// Retry policy (idempotent GET only):
+/// - 429 (rate limit) / 5xx (server error) → retry with exponential backoff
+/// - 4xx (auth / client error) → fail immediately, no retry
+/// - network error (timeout / connect) → retry
+///
+/// At most `max_attempts` tries, capped by an overall `deadline` so a slow or
+/// unresponsive upstream can never hang the process. This is the single place
+/// where retry semantics live, so providers that use it share the same
+/// behaviour (Astra P1: "unified behaviour, not just unified code shape").
+pub async fn get_json<T: serde::de::DeserializeOwned>(
+    url: &str,
+    max_attempts: u32,
+    deadline: std::time::Duration,
+) -> Result<T> {
+    use std::time::{Duration, Instant};
+    let client = http_client();
+    let started = Instant::now();
+    let mut attempt = 0u32;
+    loop {
+        attempt += 1;
+        // Enforce the overall deadline before each attempt.
+        if started.elapsed() >= deadline {
+            anyhow::bail!(
+                "GET {} exceeded {}s deadline after {} attempt(s)",
+                url,
+                deadline.as_secs(),
+                attempt - 1
+            );
+        }
+        let send_result = client
+            .get(url)
+            .header("User-Agent", USER_AGENT)
+            .send()
+            .await;
+        // Classify the outcome. `Some(resp)` = success; `Err` = failure whose
+        // message is tagged retryable or not.
+        let outcome: Result<reqwest::Response, anyhow::Error> = match send_result {
+            Ok(resp) => {
+                let status = resp.status();
+                if status.is_success() {
+                    Ok(resp)
+                } else {
+                    let body = resp.text().await.unwrap_or_default();
+                    if status == reqwest::StatusCode::TOO_MANY_REQUESTS || status.is_server_error()
+                    {
+                        Err(anyhow::anyhow!("__retryable__ {}: {}", status, body))
+                    } else {
+                        Err(anyhow::anyhow!("{}: {}", status, body))
+                    }
+                }
+            }
+            Err(e) => Err(e.into()),
+        };
+
+        match outcome {
+            Ok(resp) => {
+                return resp
+                    .json()
+                    .await
+                    .map_err(|e| anyhow::anyhow!("parse JSON: {}", e));
+            }
+            Err(e) => {
+                let msg = e.to_string();
+                let retryable = msg.contains("__retryable__")
+                    || msg.contains("error sending request")
+                    || msg.contains("timeout")
+                    || msg.contains("connect");
+                if !retryable || attempt >= max_attempts {
+                    anyhow::bail!("GET {} failed: {}", url, msg.replace("__retryable__ ", ""));
+                }
+                // Exponential backoff: ~1s, ~2s, ~4s ...
+                let backoff = Duration::from_millis((1000u64) << attempt.saturating_sub(1));
+                tokio::time::sleep(backoff).await;
+            }
+        }
+    }
+}
+
 pub fn all_providers(keys: &ApiKeys) -> Vec<Box<dyn Provider>> {
     vec![
         // Free, no key needed

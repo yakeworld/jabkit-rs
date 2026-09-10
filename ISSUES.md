@@ -40,6 +40,27 @@
 - **修复**: 单次 spawn + stdout pipe + `try_wait()` 轮询 5s deadline + 超时真正 `kill()` 子进程；子进程退出后才读 stdout（不对挂起进程阻塞读）。
 - **验证**: clippy `-D warnings` 零、编译通过（本机无 secret-tool，走 "not installed → None" 分支不报错）。
 
+## 已修 — Round 4（2026-09-10，Astra P1 可靠性/可用性）
+
+### `doctor` 命令（凭据来源诊断，不泄值）
+- **位置**: `src/cli.rs`（`Commands::Doctor`）、`src/main.rs`（Doctor 分支）、`src/keyring.rs`（`KeySource` 枚举 + `sources` 追踪 + `loaded_sources()`）
+- **现象**: 此前无任何手段确认某 provider 的密钥从哪来（env / keyring / 缺失）。README 与实现的 Keyring account 名曾不一致（Astra 指出），用户无法自查。
+- **修复**: 新增 `jabkit doctor`，显示：secret-tool 是否可用、每个已加载密钥的来源（env/keyring，**永不打印值**）、https_proxy、HTTP 客户端能否构建、implemented/stub 数量。`ApiKeys` 增 `sources: HashMap<String, KeySource>`，`from_env`/`with_keyring_fallback` 在填充时记录来源。
+- **实测**: 本机（无 secret-tool）输出正确：6 个 env key 标 `= env`、3 个 JabRef 缺失项标 `MISSING`、`secret-tool: not found`、`HTTP client: ok`、`26 (17 implemented, 9 stub)`。
+
+### HTTP 有界重试 + 统一 deadline（Astra P1：统一行为而非统一写法）
+- **位置**: `src/provider/mod.rs`（新增 `get_json` + `USER_AGENT`）、`src/provider/crossref.rs`（search + fetch_by_id 改用）
+- **现象**: 各 provider 各自手写 `http_client().get(...).send().await?`，无重试、无统一 deadline、无错误分类。限流(429)/服务端故障(5xx)会直接失败，网络抖动无恢复。
+- **修复**: `get_json(url, max_attempts, deadline)` 集中重试语义——429/5xx 指数退避重试(1s/2s/4s)、4xx(认证/客户端)立即失败、网络错误重试，整体 deadline 封顶防挂起。Crossref（最高频路径）的 search/fetch_by_id 已接入。
+- **实测**: 404 DOI → 1.3s 内 fail-fast（4xx 不重试，无退避）；成功 DOI 走 get_json 正常返回；`10.1038/s41586-020-2943-6` 现 404（Crossref 上游数据变化，非本工具 bug）。
+- **备注**: 仅 Crossref 接入（示范 + 最高频收益），其余 16 个 provider 保持现状，逐步迁移（避免一次大改的回归风险）。
+
+### 暂缓：JabRef AES 派生密钥对齐（缺真实样本，不盲改）
+- **位置**: `src/keyring.rs` `decrypt_jabref`
+- **Astra 指出**: JabRef v5.15 实际用 `DEFAULT_OWNER 偏好 + "-" + hostName` 派生密钥，当前实现是 `USER + "/" + hostname`，未实证兼容。
+- **为何暂缓**: 本机无 secret-tool、无 JabRef 实际加密的样本 blob，无法做跨语言 golden vector 验证。盲改派生逻辑 = 用一个未验证猜测替换另一个未验证猜测，违反零造假原则。
+- **下一步**: 需一个 JabRef 真实加密的 keyring 条目样本（base64 blob + 已知明文），才能验证派生逻辑并加 round-trip 测试。记录在此，不阻塞其它工作。
+
 ## 已修（2026-09-06）
 
 ### arXiv eprint 字段被覆盖为字面量 "arXiv"

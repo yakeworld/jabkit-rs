@@ -100,6 +100,31 @@ jabkit get-by-id --provider "Medline/PubMed" --id 37488184
 jabkit get-by-id --provider arXiv --id 2306.12345
 ```
 
+### `doctor` — Diagnose configuration
+
+```bash
+jabkit doctor
+```
+
+Shows, without ever printing key values: whether `secret-tool` (GNOME
+keyring) is available, where each loaded key came from (`env` vs `keyring`),
+the current `https_proxy`, whether the HTTP client (with its timeout/proxy
+configuration) builds, and the implemented/stub provider split. Use it when a
+provider unexpectedly reports "no key" or to confirm a key landed in the right
+place.
+
+```
+secret-tool (GNOME keyring): not found (keyring fallback disabled)
+
+Key sources:
+  S2_API_KEY = env
+  OPENALEX_API_KEY = keyring
+  PUBMED_API_KEY = MISSING (PubMed)
+
+HTTP client: ok (30s timeout, 10s connect)
+Providers registered: 26 (17 implemented, 9 stub)
+```
+
 ### `list-providers` — Show provider status
 
 ```bash

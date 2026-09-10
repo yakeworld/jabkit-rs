@@ -80,19 +80,9 @@ impl Provider for CrossRef {
             limit.min(100)
         );
 
-        let resp = super::http_client()
-            .get(&url)
-            .header("User-Agent", "jabkit/0.1 (mailto:yakeworld@gmail.com)")
-            .send()
-            .await?;
-
-        if !resp.status().is_success() {
-            let s = resp.status();
-            let body = resp.text().await?;
-            anyhow::bail!("Crossref API {}: {}", s, body);
-        }
-
-        let cr: CrossrefResponse = resp.json().await?;
+        // Bounded retry + 45s deadline (Astra P1: unified retry behaviour).
+        let cr: CrossrefResponse =
+            super::get_json(&url, 3, std::time::Duration::from_secs(45)).await?;
         let total_found = cr.message.total_results.unwrap_or(0);
 
         let entries: Vec<BibEntry> = cr
@@ -179,22 +169,10 @@ impl Provider for CrossRef {
         let doi = id.trim().strip_prefix("https://doi.org/").unwrap_or(id);
         let url = format!("https://api.crossref.org/works/{}", urlencoding(doi));
 
-        let resp = super::http_client()
-            .get(&url)
-            .header("User-Agent", "jabkit/0.1 (mailto:yakeworld@gmail.com)")
-            .send()
-            .await?;
-
-        if !resp.status().is_success() {
-            anyhow::bail!(
-                "Crossref fetch_by_id {}: {}",
-                resp.status(),
-                resp.text().await?
-            );
-        }
-
+        // Bounded retry + 45s deadline (4xx like 404 fail fast, no retry).
+        let raw: serde_json::Value =
+            super::get_json(&url, 3, std::time::Duration::from_secs(45)).await?;
         // Single-work response: {"message": {...work object...}} — no "items" wrapper
-        let raw: serde_json::Value = resp.json().await?;
         let msg = raw
             .get("message")
             .ok_or_else(|| anyhow::anyhow!("Missing 'message' in CrossRef response"))?;

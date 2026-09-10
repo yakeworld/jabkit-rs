@@ -170,6 +170,75 @@ async fn main() -> Result<()> {
             println!("Run 'jabkit init' to generate a .env template.");
         }
 
+        Commands::Doctor => {
+            // 1. secret-tool (GNOME keyring) availability — bounded probe.
+            let secret_tool = std::process::Command::new("secret-tool")
+                .arg("--version")
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status()
+                .map(|s| s.success())
+                .unwrap_or(false);
+            println!(
+                "secret-tool (GNOME keyring): {}",
+                if secret_tool {
+                    "available"
+                } else {
+                    "not found (keyring fallback disabled)"
+                }
+            );
+
+            // 2. Key sources — where each loaded key came from (never the value).
+            println!("\nKey sources:");
+            let sources = api_keys.loaded_sources();
+            for (env_name, src) in &sources {
+                println!("  {} = {}", env_name, src.as_str());
+            }
+            // Show the 3 well-known JabRef keys explicitly if missing, so the
+            // user sees which are absent.
+            for (env, human) in [
+                ("S2_API_KEY", "Semantic Scholar"),
+                ("PUBMED_API_KEY", "PubMed"),
+                ("OPENALEX_API_KEY", "OpenAlex"),
+            ] {
+                if !sources.contains_key(env) {
+                    println!("  {} = MISSING ({})", env, human);
+                }
+            }
+            if sources.is_empty() {
+                println!("  (no keys loaded from env)");
+            }
+
+            // 3. Proxy configuration (value shown, not a secret).
+            if let Ok(proxy) = std::env::var("https_proxy") {
+                if !proxy.is_empty() {
+                    println!("\nhttps_proxy = {}", proxy);
+                }
+            }
+
+            // 4. HTTP client build — confirm the timeout/proxy singleton
+            //    initialises without panicking.
+            match std::panic::catch_unwind(|| {
+                provider::http_client();
+            }) {
+                Ok(_) => println!("\nHTTP client: ok (30s timeout, 10s connect)"),
+                Err(_) => {
+                    println!("\nHTTP client: FAILED to build");
+                    anyhow::bail!("HTTP client build failed — see panic message above");
+                }
+            }
+
+            // 5. Summary.
+            let n_providers = providers.len();
+            let n_stubs = providers.iter().filter(|p| p.is_stub()).count();
+            println!(
+                "\nProviders registered: {} ({} implemented, {} stub)",
+                n_providers,
+                n_providers - n_stubs,
+                n_stubs
+            );
+        }
+
         Commands::GetById { provider, id } => {
             let selected = providers
                 .iter()

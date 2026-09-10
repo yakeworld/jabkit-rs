@@ -71,6 +71,10 @@ pub enum Commands {
     },
     /// List available providers with key status
     ListProviders,
+    /// Diagnose configuration: key sources (env vs keyring), secret-tool
+    /// availability, and whether the HTTP client could be built. Never
+    /// prints key values.
+    Doctor,
     /// Fetch by ID (DOI, PMID, arXiv ID, etc.)
     GetById {
         #[arg(long)]
