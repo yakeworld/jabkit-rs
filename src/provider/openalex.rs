@@ -215,12 +215,15 @@ impl Provider for OpenAlex {
 fn type_from_oa(typ: &Option<String>) -> EntryType {
     match typ.as_deref() {
         Some("article") | Some("journal-article") => EntryType::Article,
-        Some("book-chapter") => EntryType::InBook,
+        // A book chapter with its own title + book container → incollection.
+        Some("book-chapter") => EntryType::InCollection,
         Some("book") => EntryType::Book,
+        Some("proceedings-article") => EntryType::InProceedings,
         Some("proceedings") => EntryType::Proceedings,
         Some("dataset") => EntryType::Misc,
         Some("dissertation") | Some("thesis") => EntryType::Misc,
-        _ => EntryType::Article,
+        // Unknown type: do NOT pretend it is a journal article.
+        _ => EntryType::Misc,
     }
 }
 

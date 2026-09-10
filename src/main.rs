@@ -79,7 +79,10 @@ async fn main() -> Result<()> {
             if !cli.porcelain {
                 log::info!("Searching {} for '{}'...", selected.name(), query);
             }
-            let result = selected.search(query, *limit).await?;
+            let result = match selected.search(query, *limit).await {
+                Ok(r) => r,
+                Err(e) => anyhow::bail!("{}: {}", selected.name(), e),
+            };
             if !cli.porcelain {
                 log::info!("Found {} results", result.total_found);
             }
@@ -423,8 +426,8 @@ mod tests {
     }
 
     #[test]
-    fn test_inbook_rendering() {
-        let mut e = BibEntry::new(EntryType::InBook);
+    fn test_incollection_rendering() {
+        let mut e = BibEntry::new(EntryType::InCollection);
         e.set_field(Field::Author, "Smith, John".into());
         e.set_field(Field::Title, "A Book Chapter".into());
         e.set_field(Field::Booktitle, "Great Encyclopedia".into());
@@ -433,7 +436,7 @@ mod tests {
         e.set_field(Field::Publisher, "Springer".into());
         e.generate_key();
         let bib = e.to_bibtex();
-        assert!(bib.starts_with("@inbook{smith2020,"));
+        assert!(bib.starts_with("@incollection{smith2020,"));
         assert!(bib.contains("booktitle = {Great Encyclopedia}"));
         assert!(!bib.contains("journal = "));
     }
@@ -459,8 +462,9 @@ mod tests {
         e.set_field(Field::Title, "Formula E = mc{2".into());
         e.set_field(Field::Year, "2024".into());
         let bib = e.to_bibtex();
-        // The unpaired '{' becomes '\{' so the field body is well-formed
-        assert!(bib.contains(r"mc\{2"), "got: {}", bib);
+        // The unpaired '{' becomes a brace-free TeX command so the field body
+        // stays well-formed for BibTeX's brace counter.
+        assert!(bib.contains(r"mc\textbraceleft2"), "got: {}", bib);
     }
 
     #[test]
@@ -470,7 +474,7 @@ mod tests {
         e.set_field(Field::Title, "Ratio 1:2}3".into());
         e.set_field(Field::Year, "2024".into());
         let bib = e.to_bibtex();
-        assert!(bib.contains(r"1:2\}3"), "got: {}", bib);
+        assert!(bib.contains(r"1:2\textbraceright3"), "got: {}", bib);
     }
 
     #[test]
@@ -500,15 +504,16 @@ mod tests {
         e.set_field(Field::Year, "2024".into());
         let bib = e.to_bibtex();
 
-        // The stray `}` and stray `{` must appear escaped in the output.
+        // The stray `}` and stray `{` must be neutralised to brace-free TeX
+        // commands (not raw braces) so BibTeX's brace counter stays balanced.
         assert!(
-            bib.contains(r"\}"),
-            "stray close brace should be escaped: {}",
+            bib.contains(r"\textbraceright"),
+            "stray close brace should be neutralised: {}",
             bib
         );
         assert!(
-            bib.contains(r"\{"),
-            "stray open brace should be escaped: {}",
+            bib.contains(r"\textbraceleft"),
+            "stray open brace should be neutralised: {}",
             bib
         );
         // The balanced group `{ title }` must remain unescaped.

@@ -103,31 +103,61 @@ impl ApiKeys {
 
 /// Access GNOME Keyring via `secret-tool` CLI.
 /// Supports both plaintext keys and JabRef AES-encrypted blobs.
-/// Times out after 5s to avoid blocking when the keyring daemon is unresponsive.
+///
+/// Bounded and leak-free: the `secret-tool` child is spawned with a stdout
+/// pipe. The parent polls `try_wait()` against a 5s deadline and *actually
+/// kills* the child if it overruns (the previous `recv_timeout` only bounded
+/// the receiver's wait — a hung keyring daemon would leave the child running
+/// and its output uncollected). Stdout is drained only after the child exits,
+/// so we never block on a read from a hung process.
 fn secret_tool_lookup(account: &str) -> Option<String> {
-    let account = account.to_string();
-    let (tx, rx) = std::sync::mpsc::channel();
-    std::thread::spawn(move || {
-        let _ = tx.send(
-            Command::new("secret-tool")
-                .args([
-                    "lookup",
-                    "service",
-                    "org.jabref.customapikeys",
-                    "account",
-                    &account,
-                ])
-                .output(),
-        );
-    });
-    let output = match rx.recv_timeout(std::time::Duration::from_secs(5)) {
-        Ok(Ok(o)) => o,
-        _ => return None,
+    use std::io::Read;
+    use std::process::Stdio;
+
+    let mut child = match Command::new("secret-tool")
+        .args([
+            "lookup",
+            "service",
+            "org.jabref.customapikeys",
+            "account",
+            account,
+        ])
+        .stdout(Stdio::piped())
+        .spawn()
+    {
+        Ok(c) => c,
+        Err(_) => return None, // secret-tool not installed → not an error
     };
-    if !output.status.success() {
+
+    // Wait with a hard deadline; kill the child if it overruns.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(s)) => break s,
+            Ok(None) => {
+                if std::time::Instant::now() >= deadline {
+                    let _ = child.kill();
+                    let _ = child.wait(); // reap
+                    log::debug!("secret-tool lookup timed out, child killed");
+                    return None;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            Err(e) => {
+                log::debug!("secret-tool wait error: {}", e);
+                return None;
+            }
+        }
+    };
+    if !status.success() {
         return None;
     }
-    let raw = String::from_utf8(output.stdout).ok()?;
+    // Child exited cleanly — now drain its (already-bounded) stdout.
+    let mut stdout = child.stdout.take()?;
+    let mut raw = String::new();
+    if stdout.read_to_string(&mut raw).is_err() {
+        return None;
+    }
     let raw = raw.trim().to_string();
     if raw.is_empty() {
         return None;

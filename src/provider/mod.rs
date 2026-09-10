@@ -43,15 +43,29 @@ pub trait Provider: Send + Sync {
     async fn fetch_by_id(&self, id: &str) -> Result<BibEntry>;
 }
 
-/// Shared HTTP client with a 30s request timeout.
-/// All providers should use this instead of `reqwest::Client::new()`
-/// to avoid hanging forever on slow or unresponsive APIs.
+/// Shared HTTP client with a 30s request timeout and 10s connect timeout.
+/// All providers use this (a process-wide singleton) instead of
+/// `reqwest::Client::new()`, so every request carries the timeout/proxy
+/// configuration and we do not rebuild a client per request.
+///
+/// If building the client fails we DO NOT silently fall back to
+/// `Client::new()` (which would drop the timeouts and proxy settings) — we
+/// panic with a clear message, because a missing timeout means a slow or
+/// unresponsive upstream API can hang the process forever.
 pub fn http_client() -> reqwest::Client {
-    reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
-        .connect_timeout(std::time::Duration::from_secs(10))
-        .build()
-        .unwrap_or_else(|_| reqwest::Client::new())
+    static CLIENT: std::sync::OnceLock<reqwest::Client> = std::sync::OnceLock::new();
+    CLIENT
+        .get_or_init(|| {
+            reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(30))
+                .connect_timeout(std::time::Duration::from_secs(10))
+                .build()
+                .expect(
+                    "failed to build HTTP client (timeout/proxy config could not be applied); \
+                 refusing to fall back to a client without timeouts",
+                )
+        })
+        .clone()
 }
 
 pub fn all_providers(keys: &ApiKeys) -> Vec<Box<dyn Provider>> {

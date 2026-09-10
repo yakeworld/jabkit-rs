@@ -35,10 +35,14 @@ macro_rules! stub_provider {
                 true
             }
             async fn search(&self, _query: &str, _limit: usize) -> Result<SearchResult> {
-                anyhow::bail!("{}: no public search API available", $display)
+                // Explicit, accurate: this is NOT "the service has no API",
+                // it is "this build has not implemented the provider". The
+                // caller (main.rs) adds the provider-name prefix, so we do not
+                // repeat it here (avoids a doubled prefix).
+                anyhow::bail!("not implemented in this version (stub provider)")
             }
             async fn fetch_by_id(&self, _id: &str) -> Result<BibEntry> {
-                anyhow::bail!("{}: no ID lookup available", $display)
+                anyhow::bail!("ID lookup not implemented in this version (stub provider)")
             }
         }
     };

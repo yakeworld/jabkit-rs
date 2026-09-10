@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 pub enum EntryType {
     Article,
     Book,
-    InBook,
+    InCollection,
     InProceedings,
     Proceedings,
     Misc,
@@ -15,7 +15,7 @@ impl EntryType {
         match self {
             EntryType::Article => "article",
             EntryType::Book => "book",
-            EntryType::InBook => "inbook",
+            EntryType::InCollection => "incollection",
             EntryType::InProceedings => "inproceedings",
             EntryType::Proceedings => "proceedings",
             EntryType::Misc => "misc",
@@ -157,29 +157,27 @@ impl BibEntry {
     }
 }
 
-/// Escape unbalanced braces so the value is a well-formed BibTeX field body.
+/// Make the value safe as a BibTeX field body by neutralising *unpaired*
+/// braces.
 ///
-/// BibTeX treats `{` and `}` as *balanced* grouping delimiters — a `{` opens a
-/// group and the matching `}` closes it. When an upstream value contains more
-/// `{` than `}` (or vice versa) the parser will swallow following text or
-/// reject the field. To make the value safe we escape every *unpaired* brace
-/// with a backslash (`\{` / `\}`); already-balanced groups are left intact so
-/// that intentional brace-protection of capitals (`{N}ystagmus`) survives.
+/// Traditional BibTeX (bibtex.web field scanner) counts `{` and `}` for
+/// grouping and a backslash does NOT stop that count. So a stray `{` in a
+/// value leaves the group open and the scanner swallows the following fields
+/// (verified: `title = {x \{ y}` → `Illegal end of database file` + empty
+/// title/journal/year). Escaping with `\{` therefore does not fix it.
+///
+/// The safe representation of a literal brace that contains NO brace
+/// characters is `\textbraceleft` / `\textbraceright` (TeX commands that render
+/// as `{` / `}` in a LaTeX consumer and are inert to BibTeX's brace counter).
+/// Already-balanced groups (e.g. `{N}ystagmus` capital-protection) are left
+/// intact, so legitimate structure survives.
 fn escape_unbalanced_braces(value: &str) -> String {
-    // First pass: count the running balance to learn which braces are unpaired.
-    // A `{` is "paired" if a later `}` closes it; a `}` is "paired" if a
-    // previous `{` opened it. We mark unpaired `}` (negative balance) and
-    // unpaired `{` (those still open at the end).
     let chars: Vec<char> = value.chars().collect();
     let n = chars.len();
-    // depth[i] = brace depth *before* processing chars[i]
-    // We do a forward pass to find which `}` are unpaired (no open `{`), and a
-    // backward pass to find which `{` are unpaired (no closing `}`).
     let mut unpaired_open = vec![false; n]; // this `{` has no matching `}`
     let mut unpaired_close = vec![false; n]; // this `}` has no matching `{`
 
-    // Backward pass: a `{` is unpaired if we see it before any `}` to its right
-    // that could close it. Track a stack-like count of available `}`.
+    // Backward pass: a `{` is unpaired if no `}` to its right can close it.
     let mut open_to_close: i32 = 0;
     for i in (0..n).rev() {
         match chars[i] {
@@ -194,7 +192,7 @@ fn escape_unbalanced_braces(value: &str) -> String {
             _ => {}
         }
     }
-    // Forward pass: a `}` is unpaired if we see it before any `{` to its left.
+    // Forward pass: a `}` is unpaired if no `{` to its left can open it.
     let mut close_to_open: i32 = 0;
     for i in 0..n {
         match chars[i] {
@@ -213,8 +211,10 @@ fn escape_unbalanced_braces(value: &str) -> String {
     let mut out = String::with_capacity(value.len() + 4);
     for (i, &c) in chars.iter().enumerate() {
         match c {
-            '{' if unpaired_open[i] => out.push_str("\\{"),
-            '}' if unpaired_close[i] => out.push_str("\\}"),
+            // Unpaired braces become brace-free TeX commands so BibTeX's brace
+            // counter stays balanced and the field body is well-formed.
+            '{' if unpaired_open[i] => out.push_str("\\textbraceleft"),
+            '}' if unpaired_close[i] => out.push_str("\\textbraceright"),
             _ => out.push(c),
         }
     }

@@ -4,6 +4,41 @@
 > Provider 级问题（API 调用、serde、字段映射、限流）→ `~/.hermes/profiles/science/skills/jabkit-provider-diagnostics/SKILL.md`。
 >
 > 来源：2026-09-06 外部评审 + 本地源码复核 + 动态复现。
+>
+> **Round 3（2026-09-09/10）**：Poe GPT-6-Astra 二次审计（`/tmp/jabkit_poe_audit.md`）驱动的 P0 正确性修复。
+
+## 已修 — Round 3（2026-09-09/10，Astra P0 正确性）
+
+### 括号"转义"造成静默数据损坏（发布阻断项，已实证重做）
+- **位置**: `src/bibtex.rs` `escape_unbalanced_braces`
+- **现象**: Round 2 用 `\{`/`\}` 转义未配对括号。但传统 BibTeX 字段扫描只按 `{`/`}` 计数，反斜杠**不阻止**计数 → 未闭合的 `{` 把字段体吞到文件结尾。**本地实证**（真实 `bibtex 0.99d`）：`title = {x \{ y}` → `Illegal end of database file` + `empty title/journal/year`，整条记录字段全丢。
+- **修复**: 未配对 `{`/`}` 改为**不含括号字符**的 TeX 命令 `\textbraceleft`/`\textbraceright`（LaTeX 消费端渲染为 `{`/`}`，对 BibTeX 计数无害）。已配对分组（如 `{N}ystagmus` 大写保护）原样保留。
+- **实证**: 真实 `bibtex` 端到端 3 用例（单个 stray open / both stray / balanced）零错误、title 完整保留；对比修复前全字段丢失。
+- **教训**: "用自己的 formatter 输出喂自己的 checker"会验证错误的规则（Round 2 的 5 个单测全绿但方向错）。结构正确性必须用**独立实现**（真实 bibtex）验证。
+
+### book-chapter → `@inbook` 语义错误（应为 `@incollection`）
+- **位置**: `src/bibtex.rs` `EntryType`、`src/provider/crossref.rs` `type_from_crossref`、`src/provider/openalex.rs` `type_from_oa`
+- **现象**: `book-chapter` 映射到 `InBook`。但传统 BibTeX 的 `inbook` 标准字段集**不含 `booktitle`**，书名可能不显示；有独立标题的书中章节正确类型是 `incollection`（字段集含 `booktitle`）。
+- **修复**: 新增 `InCollection` 类型，删除已无生产构造点的 `InBook`（避免 clippy `-D warnings` 死变体）；Crossref/OpenAlex 的 `book-chapter` → `InCollection`，container-title → `booktitle`。
+- **附带**: 未知 Crossref/OpenAlex 类型回退从 `Article` 改 `Misc`（不再把未知工作伪装成期刊文章）；未知类型 container → `note`（不丢数据）。
+- **回归测试**: `crossref.rs::tests`（新模块）`test_crossref_book_chapter_maps_to_incollection`、`test_crossref_unknown_type_falls_back_to_misc_not_article`。
+
+### stub provider 错误消息误导 + 双重前缀
+- **位置**: `src/provider/stubs.rs`、`src/main.rs` fetch 路径
+- **现象**: stub 报 "no public search API available"（暗示外部服务问题，实际是本版本未实现）；`get-by-id` 双重前缀（`CiteSeerX: CiteSeerX: ...`）。
+- **修复**: stub 消息改为精确的 "not implemented in this version (stub provider)"，去掉自身 provider 名前缀（main 层统一加）；fetch 路径补统一 `provider: ` 前缀（与 get-by-id 一致）。
+- **实测**: `fetch --provider zbMATH` → `zbMATH: not implemented in this version (stub provider)` exit 1；`get-by-id --provider CiteSeerX` → `CiteSeerX: ID lookup not implemented in this version (stub provider)`，单前缀。
+
+### HTTP 客户端静默回退丢超时/代理
+- **位置**: `src/provider/mod.rs` `http_client`
+- **现象**: `build().unwrap_or_else(|_| Client::new())` — 构建失败时回退到无超时/无代理的客户端；且每次调用都新建客户端。
+- **修复**: `OnceLock` 进程级单例（不再每次新建）；构建失败**不静默降级**，`expect` 带清晰消息（缺超时 = 慢上游可永久挂起进程）。
+
+### secret-tool 超时不终止子进程（泄漏）
+- **位置**: `src/keyring.rs` `secret_tool_lookup`
+- **现象**: Round 1 用 `mpsc::channel` + `recv_timeout(5s)`，只限制接收方等待——`secret-tool` 子进程超时时**不被终止**，挂起的 keyring daemon 会留子进程在后台。
+- **修复**: 单次 spawn + stdout pipe + `try_wait()` 轮询 5s deadline + 超时真正 `kill()` 子进程；子进程退出后才读 stdout（不对挂起进程阻塞读）。
+- **验证**: clippy `-D warnings` 零、编译通过（本机无 secret-tool，走 "not installed → None" 分支不报错）。
 
 ## 已修（2026-09-06）
 
