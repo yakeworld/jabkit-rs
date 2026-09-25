@@ -2,16 +2,18 @@ use anyhow::Result;
 use async_trait::async_trait;
 use serde::Deserialize;
 
+use crate::resilient::{get_resilient, KeyPlacement};
+
 use super::{Provider, SearchResult};
 use crate::bibtex::{BibEntry, EntryType, Field};
 
 pub struct SemanticScholar {
-    api_key: Option<String>,
+    api_keys: Vec<String>,
 }
 
 impl SemanticScholar {
-    pub fn new(api_key: Option<String>) -> Self {
-        Self { api_key }
+    pub fn new(api_keys: Vec<String>) -> Self {
+        Self { api_keys }
     }
 }
 
@@ -105,13 +107,13 @@ impl Provider for SemanticScholar {
             fields
         );
 
-        let client = super::http_client();
-        let mut req = client.get(&url).header("User-Agent", "jabkit/0.1");
-        if let Some(key) = &self.api_key {
-            req = req.header("x-api-key", key);
-        }
-
-        let resp = req.send().await?;
+        let resp = get_resilient(
+            &|_k| url.clone(),
+            "jabkit/0.1",
+            &self.api_keys,
+            KeyPlacement::Header("x-api-key"),
+        )
+        .await?;
         if !resp.status().is_success() {
             let status = resp.status();
             let body = resp.text().await?;
@@ -194,12 +196,13 @@ impl Provider for SemanticScholar {
             "https://api.semanticscholar.org/graph/v1/paper/{}?fields=title,year,authors,journal,externalIds,abstract,venue",
             id
         );
-        let client = super::http_client();
-        let mut req = client.get(&url).header("User-Agent", "jabkit/0.1");
-        if let Some(key) = &self.api_key {
-            req = req.header("x-api-key", key);
-        }
-        let resp = req.send().await?;
+        let resp = get_resilient(
+            &|_k| url.clone(),
+            "jabkit/0.1",
+            &self.api_keys,
+            KeyPlacement::Header("x-api-key"),
+        )
+        .await?;
         if !resp.status().is_success() {
             anyhow::bail!("S2 fetch_by_id {}: {}", resp.status(), resp.text().await?);
         }

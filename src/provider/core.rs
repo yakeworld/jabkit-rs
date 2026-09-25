@@ -4,14 +4,15 @@ use serde::{Deserialize, Serialize};
 
 use super::{Provider, SearchResult};
 use crate::bibtex::{BibEntry, EntryType, Field};
+use crate::resilient::{get_resilient, post_resilient_json, KeyPlacement};
 
 pub struct Core {
-    api_key: Option<String>,
+    api_keys: Vec<String>,
 }
 
 impl Core {
-    pub fn new(api_key: Option<String>) -> Self {
-        Self { api_key }
+    pub fn new(api_keys: Vec<String>) -> Self {
+        Self { api_keys }
     }
 }
 
@@ -95,17 +96,14 @@ impl Provider for Core {
             ]),
         };
 
-        let client = super::http_client();
-        let mut req = client
-            .post("https://api.core.ac.uk/v3/search/works")
-            .header("Content-Type", "application/json")
-            .json(&body);
-
-        if let Some(key) = &self.api_key {
-            req = req.header("Authorization", format!("Bearer {}", key));
-        }
-
-        let resp = req.send().await?;
+        let resp = post_resilient_json(
+            "https://api.core.ac.uk/v3/search/works",
+            "jabkit-rs/0.1",
+            &self.api_keys,
+            KeyPlacement::Bearer,
+            &body,
+        )
+        .await?;
         if !resp.status().is_success() {
             let s = resp.status();
             let text = resp.text().await?;
@@ -162,12 +160,14 @@ impl Provider for Core {
     }
 
     async fn fetch_by_id(&self, id: &str) -> Result<BibEntry> {
-        let client = super::http_client();
-        let mut req = client.get(format!("https://api.core.ac.uk/v3/outputs/{}", id));
-        if let Some(key) = &self.api_key {
-            req = req.header("Authorization", format!("Bearer {}", key));
-        }
-        let resp = req.send().await?;
+        let url = format!("https://api.core.ac.uk/v3/outputs/{}", id);
+        let resp = get_resilient(
+            &|_k| url.clone(),
+            "jabkit-rs/0.1",
+            &self.api_keys,
+            KeyPlacement::Bearer,
+        )
+        .await?;
         if !resp.status().is_success() {
             anyhow::bail!("CORE fetch_by_id {}: {}", resp.status(), resp.text().await?);
         }

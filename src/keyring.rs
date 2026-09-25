@@ -135,6 +135,22 @@ impl ApiKeys {
         }
     }
 
+    /// Key POOL for a provider: comma-separated values from the env var(s),
+    /// deduplicated, order preserved. For S2 the pool merges both
+    /// `S2_API_KEY` and `SEMANTIC_SCHOLAR_API_KEY` (the harvested key list
+    /// lives in one, the self-applied key in the other).
+    pub fn get_pool(&self, env_name: &str) -> Vec<String> {
+        let mut pool: Vec<String> = Vec::new();
+        match env_name {
+            "S2_API_KEY" => {
+                extend_pool(&mut pool, self.get("S2_API_KEY"));
+                extend_pool(&mut pool, self.get("SEMANTIC_SCHOLAR_API_KEY"));
+            }
+            _ => extend_pool(&mut pool, self.get(env_name)),
+        }
+        pool
+    }
+
     /// Check if any key is set
     pub fn has_any(&self) -> bool {
         self.semantic_scholar.is_some()
@@ -147,6 +163,18 @@ impl ApiKeys {
     /// Sorted (BTreeMap) for stable `doctor` output.
     pub fn loaded_sources(&self) -> std::collections::BTreeMap<String, KeySource> {
         self.sources.iter().map(|(k, v)| (k.clone(), *v)).collect()
+    }
+}
+
+/// Append comma-separated keys from `v` into `pool` (dedup, order preserved).
+fn extend_pool(pool: &mut Vec<String>, v: Option<&str>) {
+    if let Some(v) = v {
+        for k in v.split(',') {
+            let k = k.trim();
+            if !k.is_empty() && !pool.iter().any(|p| p == k) {
+                pool.push(k.to_string());
+            }
+        }
     }
 }
 

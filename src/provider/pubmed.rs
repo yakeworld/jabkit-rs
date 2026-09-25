@@ -4,14 +4,15 @@ use serde::Deserialize;
 
 use super::{Provider, SearchResult};
 use crate::bibtex::{BibEntry, EntryType, Field};
+use crate::resilient::{get_resilient, KeyPlacement};
 
 pub struct PubMed {
-    api_key: Option<String>,
+    api_keys: Vec<String>,
 }
 
 impl PubMed {
-    pub fn new(api_key: Option<String>) -> Self {
-        Self { api_key }
+    pub fn new(api_keys: Vec<String>) -> Self {
+        Self { api_keys }
     }
 }
 
@@ -85,21 +86,19 @@ impl Provider for PubMed {
 
     async fn search(&self, query: &str, limit: usize) -> Result<SearchResult> {
         // Step 1: esearch to get PMIDs
-        let mut search_url = format!(
+        let base_search = format!(
             "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term={}&retmax={}&retmode=json",
             urlencoding(query),
             limit.min(100)
         );
-        if let Some(key) = &self.api_key {
-            search_url.push_str(&format!("&api_key={}", key));
-        }
 
-        let client = super::http_client();
-        let resp = client
-            .get(&search_url)
-            .header("User-Agent", "jabkit/0.1")
-            .send()
-            .await?;
+        let resp = get_resilient(
+            &|k| format!("{base_search}&api_key={k}"),
+            "jabkit/0.1",
+            &self.api_keys,
+            KeyPlacement::Baked,
+        )
+        .await?;
 
         if !resp.status().is_success() {
             anyhow::bail!("PubMed esearch {}: {}", resp.status(), resp.text().await?);
@@ -126,19 +125,18 @@ impl Provider for PubMed {
 
         // Step 2: esummary to get details
         let ids = pmids.join(",");
-        let mut summary_url = format!(
+        let base_summary = format!(
             "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&id={}&retmode=json",
             ids
         );
-        if let Some(key) = &self.api_key {
-            summary_url.push_str(&format!("&api_key={}", key));
-        }
 
-        let resp2 = client
-            .get(&summary_url)
-            .header("User-Agent", "jabkit/0.1")
-            .send()
-            .await?;
+        let resp2 = get_resilient(
+            &|k| format!("{base_summary}&api_key={k}"),
+            "jabkit/0.1",
+            &self.api_keys,
+            KeyPlacement::Baked,
+        )
+        .await?;
 
         if !resp2.status().is_success() {
             anyhow::bail!(
@@ -197,19 +195,18 @@ impl Provider for PubMed {
 
     async fn fetch_by_id(&self, id: &str) -> Result<BibEntry> {
         let pmid = id.trim().strip_prefix("PMID:").unwrap_or(id);
-        let mut url = format!(
+        let base = format!(
             "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&id={}&retmode=json",
             pmid
         );
-        if let Some(key) = &self.api_key {
-            url.push_str(&format!("&api_key={}", key));
-        }
 
-        let resp = super::http_client()
-            .get(&url)
-            .header("User-Agent", "jabkit/0.1")
-            .send()
-            .await?;
+        let resp = get_resilient(
+            &|k| format!("{base}&api_key={k}"),
+            "jabkit/0.1",
+            &self.api_keys,
+            KeyPlacement::Baked,
+        )
+        .await?;
 
         let s: ESummaryResponse = resp.json().await?;
 

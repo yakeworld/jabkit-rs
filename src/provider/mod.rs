@@ -1,17 +1,22 @@
 pub mod acm;
 pub mod ads;
 pub mod arxiv;
+pub mod biorxiv;
 pub mod core;
 pub mod crossref;
+pub mod datacite;
 pub mod dblp;
 pub mod doaj;
 pub mod europe_pmc;
+pub mod google_books;
 pub mod ieee;
 pub mod inspire;
+pub mod libgen;
 pub mod openalex;
 pub mod pubmed;
 pub mod scopus;
 pub mod semantic_scholar;
+pub mod serp_scholar;
 pub mod springer;
 pub mod stubs;
 pub mod unpaywall;
@@ -156,10 +161,16 @@ pub fn all_providers(keys: &ApiKeys) -> Vec<Box<dyn Provider>> {
         // Free, no key needed
         Box::new(crossref::CrossRef),
         Box::new(arxiv::ArXiv),
-        Box::new(dblp::Dblp),
+        // DBLP 已弃用: Anubis 反爬 (Proof-of-Work + JS challenge), 2026-09-15
+        // Box::new(dblp::Dblp),
         Box::new(doaj::Doaj),
         Box::new(europe_pmc::EuropePmc),
         Box::new(inspire::Inspire),
+        Box::new(biorxiv::BioRxiv::new("biorxiv", 30)),
+        Box::new(datacite::DataCite),
+        // LibGen: 需代理 (GFW 下直连超时), JABKIT_PROXY=socks5h://127.0.0.1:1080
+        Box::new(libgen::LibGen::new("libgen.li")),
+        Box::new(libgen::LibGen::new_books("libgen.li")),
         // Stubs: registered but API unavailable
         Box::new(stubs::CiteSeer),
         Box::new(stubs::Isidore),
@@ -170,31 +181,26 @@ pub fn all_providers(keys: &ApiKeys) -> Vec<Box<dyn Provider>> {
         Box::new(stubs::Gvk),
         Box::new(stubs::Lobid),
         Box::new(stubs::Doab),
-        // Key required
-        Box::new(core::Core::new(keys.get("CORE_API_KEY").map(String::from))),
-        Box::new(semantic_scholar::SemanticScholar::new(
-            keys.get("S2_API_KEY").map(String::from),
+        // Key required — pools: env vars may hold comma-separated key lists
+        // (2026-09-26 resilient: key rotation + exit rotation for all sources)
+        Box::new(core::Core::new(keys.get_pool("CORE_API_KEY"))),
+        Box::new(google_books::GoogleBooks::new(
+            keys.get_pool("GOOGLE_BOOKS_API_KEY"),
         )),
-        Box::new(pubmed::PubMed::new(
-            keys.get("PUBMED_API_KEY").map(String::from),
-        )),
-        Box::new(openalex::OpenAlex::new(
-            keys.get("OPENALEX_API_KEY").map(String::from),
-        )),
-        Box::new(ieee::Ieee::new(keys.get("IEEE_API_KEY").map(String::from))),
-        Box::new(springer::Springer::new(
-            keys.get("SPRINGER_API_KEY").map(String::from),
-        )),
-        Box::new(scopus::Scopus::new(
-            keys.get("SCOPUS_API_KEY").map(String::from),
-        )),
-        Box::new(acm::Acm::new(keys.get("ACM_API_KEY").map(String::from))),
-        Box::new(ads::Ads::new(keys.get("ADS_API_KEY").map(String::from))),
-        Box::new(unpaywall::Unpaywall::new(
-            keys.get("UNPAYWALL_EMAIL").map(String::from),
-        )),
+        Box::new(semantic_scholar::SemanticScholar::new(keys.get_pool("S2_API_KEY"))),
+        Box::new(pubmed::PubMed::new(keys.get_pool("PUBMED_API_KEY"))),
+        Box::new(openalex::OpenAlex::new(keys.get_pool("OPENALEX_API_KEY"))),
+        Box::new(ieee::Ieee::new(keys.get_pool("IEEE_API_KEY"))),
+        Box::new(springer::Springer::new(keys.get_pool("SPRINGER_API_KEY"))),
+        Box::new(scopus::Scopus::new(keys.get_pool("SCOPUS_API_KEY"))),
+        Box::new(acm::Acm::new(keys.get_pool("ACM_API_KEY"))),
+        Box::new(ads::Ads::new(keys.get_pool("ADS_API_KEY"))),
+        Box::new(unpaywall::Unpaywall::new(keys.get_pool("UNPAYWALL_EMAIL"))),
         Box::new(stubs::Biodiversity::new(
-            keys.get("BIODIVERSITY_KEY").map(String::from),
+            keys.get_pool("BIODIVERSITY_KEY").into_iter().next(),
+        )),
+        Box::new(serp_scholar::SerpScholar::new(
+            keys.get_pool("SERP_API_KEY"),
         )),
     ]
 }

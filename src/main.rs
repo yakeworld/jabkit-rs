@@ -2,6 +2,7 @@ mod bibtex;
 mod cli;
 mod keyring;
 mod provider;
+pub mod resilient;
 
 use crate::bibtex::{deduplicate_keys, BibEntry};
 use anyhow::Result;

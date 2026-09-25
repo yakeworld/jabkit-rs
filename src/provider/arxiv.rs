@@ -5,6 +5,7 @@ use quick_xml::Reader;
 
 use super::{Provider, SearchResult};
 use crate::bibtex::{BibEntry, EntryType, Field};
+use crate::resilient::{get_resilient, KeyPlacement};
 
 pub struct ArXiv;
 
@@ -21,11 +22,13 @@ impl Provider for ArXiv {
             q, limit.min(100)
         );
 
-        let resp = super::http_client()
-            .get(&url)
-            .header("User-Agent", "jabkit/0.1")
-            .send()
-            .await?;
+        let resp = get_resilient(
+            &|_k| url.clone(),
+            "jabkit/0.1",
+            &[],
+            KeyPlacement::Baked,
+        )
+        .await?;
 
         if !resp.status().is_success() {
             anyhow::bail!("arXiv API {}: {}", resp.status(), resp.text().await?);
@@ -44,11 +47,13 @@ impl Provider for ArXiv {
         let arxiv_id = id.trim().strip_prefix("arXiv:").unwrap_or(id);
         let url = format!("https://export.arxiv.org/api/query?id_list={}", arxiv_id);
 
-        let resp = super::http_client()
-            .get(&url)
-            .header("User-Agent", "jabkit/0.1")
-            .send()
-            .await?;
+        let resp = get_resilient(
+            &|_k| url.clone(),
+            "jabkit/0.1",
+            &[],
+            KeyPlacement::Baked,
+        )
+        .await?;
 
         let xml = resp.text().await?;
         let mut entries = parse_arxiv_xml(&xml)?;

@@ -4,14 +4,15 @@ use serde::Deserialize;
 
 use super::{Provider, SearchResult};
 use crate::bibtex::{BibEntry, EntryType, Field};
+use crate::resilient::{get_resilient, KeyPlacement};
 
 pub struct OpenAlex {
-    api_key: Option<String>,
+    api_keys: Vec<String>,
 }
 
 impl OpenAlex {
-    pub fn new(api_key: Option<String>) -> Self {
-        Self { api_key }
+    pub fn new(api_keys: Vec<String>) -> Self {
+        Self { api_keys }
     }
 }
 
@@ -100,27 +101,22 @@ struct OASubfield {
 
 #[async_trait]
 impl Provider for OpenAlex {
-    fn name(&self) -> &'static str {
-        "OpenAlex"
-    }
-    fn key_env(&self) -> Option<&'static str> {
-        Some("OPENALEX_API_KEY")
-    }
+    fn name(&self) -> &'static str { "OpenAlex" }
+    fn key_env(&self) -> Option<&'static str> { Some("OPENALEX_API_KEY") }
 
     async fn search(&self, query: &str, limit: usize) -> Result<SearchResult> {
-        let url = format!(
+        let base = format!(
             "https://api.openalex.org/works?search={}&per_page={}&sort=relevance_score:desc",
             urlencoding(query),
             limit.min(200)
         );
-
-        let client = super::http_client();
-        let mut req = client.get(&url).header("User-Agent", "jabkit/0.1");
-        if let Some(key) = &self.api_key {
-            req = req.header("x-api-key", key);
-        }
-
-        let resp = req.send().await?;
+        let resp = get_resilient(
+            &|_k| base.clone(),
+            "jabkit/0.1",
+            &self.api_keys,
+            KeyPlacement::Header("x-api-key"),
+        )
+        .await?;
         if !resp.status().is_success() {
             anyhow::bail!("OpenAlex {}: {}", resp.status(), resp.text().await?);
         }
@@ -169,19 +165,16 @@ impl Provider for OpenAlex {
     }
 
     async fn fetch_by_id(&self, id: &str) -> Result<BibEntry> {
-        let url = format!("https://api.openalex.org/works/{}", urlencoding(id));
-        let client = super::http_client();
-        let resp = client
-            .get(&url)
-            .header("User-Agent", "jabkit/0.1")
-            .send()
-            .await?;
+        let base = format!("https://api.openalex.org/works/{}", urlencoding(id));
+        let resp = get_resilient(
+            &|_k| base.clone(),
+            "jabkit/0.1",
+            &self.api_keys,
+            KeyPlacement::Header("x-api-key"),
+        )
+        .await?;
         if !resp.status().is_success() {
-            anyhow::bail!(
-                "OpenAlex fetch_by_id {}: {}",
-                resp.status(),
-                resp.text().await?
-            );
+            anyhow::bail!("OpenAlex fetch_by_id {}: {}", resp.status(), resp.text().await?);
         }
 
         let r: OAWork = resp.json().await?;
@@ -215,15 +208,12 @@ impl Provider for OpenAlex {
 fn type_from_oa(typ: &Option<String>) -> EntryType {
     match typ.as_deref() {
         Some("article") | Some("journal-article") => EntryType::Article,
-        // A book chapter with its own title + book container → incollection.
-        Some("book-chapter") => EntryType::InCollection,
+        Some("book-chapter") => EntryType::InProceedings,
         Some("book") => EntryType::Book,
-        Some("proceedings-article") => EntryType::InProceedings,
         Some("proceedings") => EntryType::Proceedings,
         Some("dataset") => EntryType::Misc,
         Some("dissertation") | Some("thesis") => EntryType::Misc,
-        // Unknown type: do NOT pretend it is a journal article.
-        _ => EntryType::Misc,
+        _ => EntryType::Article,
     }
 }
 
