@@ -156,10 +156,14 @@ fn advance_exit(exit_idx: &mut usize, exits: &[Exit]) {
 
 /// Perform a GET with key + exit rotation and bounded retry.
 ///
-/// Returns the first non-retryable response. If the retry budget is exhausted
-/// on retryable statuses, returns the LAST response (caller bails with a
-/// normal error). Network errors: retried like 429; if no response was ever
-/// obtained, the last network error is returned.
+/// Returns the first non-retryable response. Retry policy:
+/// - 429: key-level + IP-level → rotate key first, then exit (NEWNYM on Tor).
+///   Bounded; on exhaustion returns the LAST response.
+/// - 401/403: key invalid (key-level, not IP-level) → rotate to the next key
+///   and continue, so a dead key anywhere in the pool is skipped without
+///   burning the whole retry budget on exits.
+/// - Network errors: retried like 429; if no response was ever obtained, the
+///   last network error is returned.
 pub async fn get_resilient<F>(
     url_for: &F,
     ua: &str,
@@ -203,6 +207,17 @@ where
             Ok(resp) => {
                 let status = resp.status();
                 if !is_retryable(status) {
+                    // 401/403 = key invalid (key-level, not IP-level). With a
+                    // multi-key pool, rotate to the next key and skip the dead
+                    // one — don't return immediately, and don't burn the budget
+                    // on exit switching either.
+                    if (status.as_u16() == 401 || status.as_u16() == 403)
+                        && keys.len() > 1
+                    {
+                        key_idx += 1;
+                        last_resp = Some(resp);
+                        continue;
+                    }
                     return Ok(resp);
                 }
                 // Retryable status (429/5xx): keep the response to report on
@@ -286,6 +301,17 @@ where
             Ok(resp) => {
                 let status = resp.status();
                 if !is_retryable(status) {
+                    // 401/403 = key invalid (key-level, not IP-level). With a
+                    // multi-key pool, rotate to the next key and skip the dead
+                    // one — don't return immediately, and don't burn the budget
+                    // on exit switching either.
+                    if (status.as_u16() == 401 || status.as_u16() == 403)
+                        && keys.len() > 1
+                    {
+                        key_idx += 1;
+                        last_resp = Some(resp);
+                        continue;
+                    }
                     return Ok(resp);
                 }
                 // Retryable status (429/5xx): keep the response to report on
