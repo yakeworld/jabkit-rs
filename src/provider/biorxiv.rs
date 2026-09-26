@@ -115,7 +115,17 @@ impl Provider for BioRxiv {
             if !resp.status().is_success() {
                 continue;
             }
-            let d: BRResponse = resp.json().await?;
+            // BioRxiv returns HTTP 200 with an EMPTY body (content-length: 0)
+            // for dates with no submissions (observed 2026-09). Skip those
+            // instead of failing the whole search on the empty JSON decode.
+            let body = resp.text().await?;
+            if body.trim().is_empty() || !body.starts_with('{') {
+                continue;
+            }
+            let d: BRResponse = match serde_json::from_str(&body) {
+                Ok(d) => d,
+                Err(_) => continue,
+            };
             for it in d.collection.unwrap_or_default() {
                 if out.len() >= limit {
                     break;
