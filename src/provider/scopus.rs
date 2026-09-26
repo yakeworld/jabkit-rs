@@ -43,11 +43,12 @@ impl Provider for Scopus {
             "https://api.elsevier.com/content/search/scopus?query={}&count={}",
             urlencoding(query), limit.min(25)
         );
+        // Elsevier 只认 X-ELS-APIKey header (query param apiKey= 会 401), 2026-09-26 实测
         let resp = get_resilient(
-            &|k| format!("{base}&apiKey={k}"),
+            &|_k| base.clone(),
             "jabkit-rs/0.1",
             &self.api_keys,
-            KeyPlacement::Baked,
+            KeyPlacement::Header("X-ELS-APIKey"),
         )
         .await?;
         if !resp.status().is_success() { anyhow::bail!("Scopus {}: {}", resp.status(), resp.text().await?); }
